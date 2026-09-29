@@ -1,0 +1,37 @@
+# 상화 & 인화네 가계부 🏠
+
+구글시트 "2026년 상화&인화네 가계부"를 옮겨 온 부부용 가계부 사이트입니다.
+정적 HTML/CSS/JS + Vercel 서버리스 함수 1개(`api/ledger.js`)로 되어 있어서 별도 빌드가 필요 없습니다.
+
+## 기능
+- **요약**: 수입 · 총 지출 · 남는 돈, 분류별 지출 막대, 생활비를 같이/상화/인화별로 나눠 보기, 출금일 메모
+- **생활비**: 날짜 · 항목 · 금액 빠른 입력, 날짜별 묶음, 사람별 필터, 구글시트에서 복사한 줄 붙여넣기
+- **월 예산표**: 수입 / 상화·인화 고정비 / 모임 / 대출 / 용돈&생활비 / 목적·순수적금 / 공과금 / 기타 …
+  항목·분류를 자유롭게 추가·수정하고 합계는 자동 계산 (`15000+3000` 같은 식도 입력 가능).
+  "생활비" 항목은 생활비 내역 합계가 자동으로 들어갑니다.
+- **이체**: 이체리스트 자동 생성, 계좌 메모, 이체 완료 체크, 카톡용 목록 복사
+- **다음 달 시작**: 이전 달의 항목·금액·계좌를 복사하고 생활비 내역과 이체 체크만 비워서 시작
+- 두 사람이 동시에 써도 서로 덮어쓰지 않도록 변경사항 단위로 저장, 15초마다 상대방 입력 반영
+
+## 배포 (Vercel)
+1. 이 폴더를 GitHub 저장소에 push
+2. [vercel.com](https://vercel.com) → **Add New… → Project** → 저장소 선택 → Framework Preset **Other** → Deploy
+3. 프로젝트의 **Storage** 탭 → **Upstash for Redis**(무료) 만들기 → 이 프로젝트에 **Connect**
+   (환경변수 `KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동으로 들어갑니다)
+4. **Settings → Environment Variables**에 `APP_PASSWORD` 추가 (두 사람이 함께 쓸 비밀번호)
+5. **Deployments → Redeploy** 한 번 하면 끝
+
+처음 열면 9월 데이터(구글시트 9월 탭)가 자동으로 들어가 있습니다.
+
+## 로컬에서 보기
+저장소 없이 화면만 확인하는 "미리보기 모드"로 동작합니다(입력 내용은 그 브라우저에만 저장).
+```
+powershell -ExecutionPolicy Bypass -File .claude/serve.ps1
+```
+→ http://localhost:5173
+
+## 구조
+- `index.html`, `style.css`, `app.js` — 화면
+- `shared/ledger.js` — 합계 계산 · 변경 적용 로직 (브라우저와 서버가 같이 사용)
+- `shared/seed.js` — 첫 실행 때 넣는 2026년 9월 데이터
+- `api/ledger.js` — Vercel 서버리스 함수 (Upstash Redis에 저장)
