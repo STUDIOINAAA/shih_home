@@ -241,6 +241,10 @@ function viewHome(m) {
   const max = Math.max(1, ...cats.map((x) => x.v));
   const living = logTotal(m);
   const days = new Set(m.log.map((e) => e.date)).size;
+  // 예산표에서 이름에 "용돈"이 들어간 항목 (상화 용돈, 인화 용돈 …)
+  const allowance = m.cats.flatMap((c) => c.items)
+    .filter((it) => !it.auto && it.name.includes('용돈'))
+    .map((it) => ({ name: it.name, amount: itemAmount(m, it), who: guessWho(it.name) }));
   return `
     <section class="stats">
       <div class="stat"><span>수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
@@ -273,6 +277,15 @@ function viewHome(m) {
         }).join('')}
       </div>
     </section>
+
+    ${allowance.length ? `
+    <section class="card">
+      <div class="card-head"><h2>용돈</h2><button class="link" data-act="tab" data-tab="plan">예산표에서 수정 →</button></div>
+      <div class="living-total"><b>${fmt(allowance.reduce((s, a) => s + a.amount, 0))}</b>원</div>
+      <div class="split">
+        ${allowance.map((a) => `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b></div>`).join('')}
+      </div>
+    </section>` : ''}
 
     <section class="card">
       <div class="card-head"><h2>메모</h2><span class="muted">출금일 · 급여일 등</span></div>
