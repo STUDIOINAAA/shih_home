@@ -1,6 +1,6 @@
 import {
   PEOPLE, WHO, uid, fmt, monthLabel, shiftMonth, parseAmount, logTotal, itemAmount,
-  catTotal, totals, applyOp, nextMonthFrom, transferRows, parsePasted, guessWho,
+  catTotal, totals, applyOp, nextMonthFrom, parsePasted, guessWho,
 } from './shared/ledger.js';
 import { seedMonth } from './shared/seed.js';
 
@@ -24,7 +24,8 @@ const S = {
   monthId: today().slice(0, 7),
   month: null,
   months: [],
-  tab: store.get('gb-tab', 'home'),
+  tab: ['home', 'log', 'plan'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
+  showIncome: false,
   whoFilter: '전체',
   addWho: '같이',
   pending: 0,
@@ -159,8 +160,20 @@ const TABS = [
   ['home', '요약', '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'],
   ['log', '생활비', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
   ['plan', '월 예산표', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'],
-  ['transfer', '이체', '<path d="M4 8h14l-4-4M20 16H6l4 4"/>'],
 ];
+
+// 수입과 남는 돈(수입이 역산되는 값)은 탭하기 전까지 가려둔다
+const HIDE_AFTER = 30000;
+let hideTimer;
+function revealIncome(on) {
+  S.showIncome = on;
+  clearTimeout(hideTimer);
+  if (on) hideTimer = setTimeout(() => { S.showIncome = false; if (!isEditing()) render(); }, HIDE_AFTER);
+  render();
+}
+const secret = (html, cls = '') => S.showIncome
+  ? `<button class="secret shown ${cls}" data-act="reveal" aria-label="수입 숨기기">${html}</button>`
+  : `<button class="secret ${cls}" data-act="reveal" aria-label="탭해서 수입 보기"><span class="dots">••••••</span><small>탭해서 보기</small></button>`;
 
 function render() {
   if (!S.me || S.needKey) return renderLogin();
@@ -216,7 +229,7 @@ function emptyMonth() {
   return `
     <section class="empty">
       <p class="empty-title">${monthLabel(S.monthId)} 가계부가 아직 없어요</p>
-      ${src ? `<p class="muted">${monthLabel(src)}의 고정비·적금·계좌를 그대로 가져오고,<br>생활비 내역과 이체 체크만 비워서 시작해요.</p>
+      ${src ? `<p class="muted">${monthLabel(src)}의 고정비·적금 항목과 금액을 그대로 가져오고,<br>생활비 내역만 비워서 시작해요.</p>
       <button class="primary" data-act="create">${monthLabel(src).slice(6)} 내용으로 시작하기</button>` : ''}
     </section>`;
 }
@@ -230,11 +243,12 @@ function viewHome(m) {
   const days = new Set(m.log.map((e) => e.date)).size;
   return `
     <section class="stats">
-      <div class="stat"><span>수입</span><b>${fmt(t.income)}</b></div>
+      <div class="stat"><span>수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
       <div class="stat"><span>총 지출</span><b>${fmt(t.expense)}</b></div>
-      <div class="stat big ${t.balance < 0 ? 'neg' : ''}">
-        <span>남는 돈 <small>수입 − 지출</small></span><b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>
-        ${t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
+      <div class="stat big ${S.showIncome && t.balance < 0 ? 'neg' : ''}">
+        <span>남는 돈 <small>수입 − 지출</small></span>
+        ${secret(`<b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>`)}
+        ${S.showIncome && t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
       </div>
     </section>
 
@@ -320,10 +334,16 @@ function viewLog(m) {
 /* ---- 월 예산표 ---- */
 function catCard(m, c, isIncome = false) {
   const total = catTotal(m, c);
+  if (isIncome && !S.showIncome) {
+    return `
+      <section class="card cat income locked">
+        <div class="card-head"><h2>수입</h2>${secret('', 'compact')}</div>
+      </section>`;
+  }
   return `
     <section class="card cat ${isIncome ? 'income' : ''} ${c.saving ? 'saving' : ''}">
       <div class="card-head">
-        ${isIncome ? `<h2>수입</h2>` : `<input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
+        ${isIncome ? `<h2>수입 <button class="link" data-act="reveal">숨기기</button></h2>` : `<input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
         <b class="cat-total">${fmt(total)}</b>
         ${isIncome ? '' : `<button class="icon small" data-act="cat-menu" data-cat="${c.id}" aria-label="분류 설정">⋯</button>`}
       </div>
@@ -348,9 +368,9 @@ function viewPlan(m) {
   const t = totals(m);
   return `
     <div class="plan-sum">
-      <div><span>수입</span><b>${fmt(t.income)}</b></div>
+      <div><span>수입</span>${secret(`<b>${fmt(t.income)}</b>`, 'compact')}</div>
       <div><span>지출</span><b>${fmt(t.expense)}</b></div>
-      <div class="${t.balance < 0 ? 'neg' : ''}"><span>남는 돈</span><b>${fmt(t.balance)}</b></div>
+      <div class="${S.showIncome && t.balance < 0 ? 'neg' : ''}"><span>남는 돈</span>${secret(`<b>${fmt(t.balance)}</b>`, 'compact')}</div>
     </div>
     <p class="hint">금액 칸에 <code>15000+3000</code>처럼 식을 넣어도 계산돼요.</p>
     <div class="grid">
@@ -360,36 +380,7 @@ function viewPlan(m) {
     <button class="ghost wide" data-act="add-cat">+ 분류 추가</button>`;
 }
 
-/* ---- 이체 ---- */
-function viewTransfer(m) {
-  const rows = transferRows(m);
-  const done = rows.filter((r) => m.done?.[r.key]);
-  const sum = rows.reduce((s, r) => s + r.amount, 0);
-  const left = rows.filter((r) => !m.done?.[r.key]).reduce((s, r) => s + r.amount, 0);
-  return `
-    <section class="card">
-      <div class="card-head">
-        <h2>이체리스트</h2>
-        <span class="muted">${done.length}/${rows.length} 완료</span>
-      </div>
-      <div class="progress"><i style="width:${rows.length ? (done.length / rows.length) * 100 : 0}%"></i></div>
-      <p class="muted small">남은 이체 <b>${fmt(left)}원</b> / 전체 ${fmt(sum)}원</p>
-      <ul class="transfers">
-        ${rows.map((r) => `
-          <li class="${m.done?.[r.key] ? 'done' : ''}">
-            <label class="check"><input type="checkbox" data-field="done" data-key="${r.key}" ${m.done?.[r.key] ? 'checked' : ''} /><span></span></label>
-            <div class="tr-main">
-              <div class="tr-top"><span>${esc(r.name)}${r.group ? ` <small>${esc(r.group)}</small>` : ''}</span><b>${fmt(r.amount)}</b></div>
-              <input class="account" value="${esc(r.account)}" placeholder="계좌 (예: 국민 123-45-678)" data-field="account" data-cat="${r.cat}" ${r.item ? `data-item="${r.item}"` : ''} />
-            </div>
-          </li>`).join('') || '<li class="muted">이체할 금액이 없어요</li>'}
-      </ul>
-      <button class="ghost wide" data-act="copy-transfers">카톡에 보낼 목록 복사</button>
-    </section>
-    <p class="hint">분류별로 보낼지 항목별로 보낼지는 월 예산표 → 분류의 ⋯ 에서 바꿀 수 있어요.</p>`;
-}
-
-const VIEWS = { home: viewHome, log: viewLog, plan: viewPlan, transfer: viewTransfer };
+const VIEWS = { home: viewHome, log: viewLog, plan: viewPlan };
 
 /* ---------------- 시트(모달) ---------------- */
 
@@ -435,10 +426,6 @@ function catMenu(catId) {
   const hasAuto = c.items.some((i) => i.auto);
   openSheet(`
     <h2>${esc(c.name)}</h2>
-    <fieldset class="seg-field"><legend>이체리스트에 넣는 방식</legend>
-      <label class="radio"><input type="radio" name="transfer" value="total" ${c.transfer !== 'items' ? 'checked' : ''} /><span>분류 합계로 한 번</span></label>
-      <label class="radio"><input type="radio" name="transfer" value="items" ${c.transfer === 'items' ? 'checked' : ''} /><span>항목마다 따로</span></label>
-    </fieldset>
     <label class="toggle"><input type="checkbox" name="saving" ${c.saving ? 'checked' : ''} /> 저축으로 집계 (요약의 저축 금액에 포함)</label>
     <div class="sheet-row">
       <button value="up" class="ghost" formnovalidate>↑ 위로</button>
@@ -455,7 +442,7 @@ function catMenu(catId) {
       if (!confirm(`'${c.name}' 분류와 항목을 모두 지울까요?`)) return false;
       commit({ type: 'delCat', cat: catId }); return;
     }
-    commit({ type: 'setCat', cat: catId, patch: { transfer: fd.get('transfer'), saving: fd.get('saving') === 'on' } });
+    commit({ type: 'setCat', cat: catId, patch: { saving: fd.get('saving') === 'on' } });
   });
 }
 
@@ -517,19 +504,13 @@ $app.addEventListener('click', (ev) => {
       break;
     }
     case 'add-cat': {
-      const cat = { id: 'c-' + uid(), name: '새 분류', transfer: 'total', items: [{ id: uid(), name: '항목', amount: 0 }] };
+      const cat = { id: 'c-' + uid(), name: '새 분류', items: [{ id: uid(), name: '항목', amount: 0 }] };
       commit({ type: 'addCat', cat });
       const input = document.querySelector(`[data-field="cat-name"][data-cat="${cat.id}"]`);
       input?.focus(); input?.select();
       break;
     }
-    case 'copy-transfers': {
-      const m = S.month;
-      const text = `[${monthLabel(m.id)} 이체리스트]\n` + transferRows(m)
-        .map((r) => `${m.done?.[r.key] ? '✅' : '⬜'} ${r.name} ${fmt(r.amount)}원${r.account ? ` → ${r.account}` : ''}`).join('\n');
-      navigator.clipboard.writeText(text).then(() => toast('복사했어요'), () => toast('복사하지 못했어요'));
-      break;
-    }
+    case 'reveal': revealIncome(!S.showIncome); break;
   }
 });
 
@@ -552,12 +533,6 @@ $app.addEventListener('change', (ev) => {
       commit({ type: 'setItem', cat: d.cat, item: d.item, patch: { amount: n } });
       break;
     }
-    case 'account':
-      commit(d.item
-        ? { type: 'setItem', cat: d.cat, item: d.item, patch: { account: el.value.trim() } }
-        : { type: 'setCat', cat: d.cat, patch: { account: el.value.trim() } });
-      break;
-    case 'done': commit({ type: 'setDone', key: d.key, value: el.checked }); break;
   }
 });
 
@@ -589,6 +564,7 @@ setInterval(() => {
   if (document.visibilityState === 'visible' && S.me && S.month && S.pending === 0 && S.mode === 'remote') load(S.monthId, { quiet: true });
 }, 15000);
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && S.showIncome) { S.showIncome = false; clearTimeout(hideTimer); render(); }
   if (document.visibilityState === 'visible' && S.me && S.pending === 0 && S.mode === 'remote') load(S.monthId, { quiet: true });
 });
 

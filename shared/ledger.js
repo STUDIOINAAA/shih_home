@@ -1,5 +1,5 @@
 // 브라우저와 서버(api/ledger.js)가 함께 쓰는 가계부 로직.
-// 한 달 데이터 = { id, rev, income, cats, log, memo, done }
+// 한 달 데이터 = { id, rev, income, cats, log, memo }
 
 export const PEOPLE = ['상화', '인화'];
 export const WHO = ['같이', '상화', '인화'];
@@ -101,16 +101,13 @@ export function applyOp(month, op) {
     case 'setMemo':
       month.memo = op.text;
       break;
-    case 'setDone':
-      month.done = { ...month.done, [op.key]: !!op.value };
-      break;
     default:
       throw new Error('알 수 없는 변경: ' + op.type);
   }
   return month;
 }
 
-// 이전 달을 바탕으로 새 달 만들기: 항목·금액·계좌는 그대로, 생활비 내역과 이체 체크는 비움
+// 이전 달을 바탕으로 새 달 만들기: 항목·금액은 그대로, 생활비 내역은 비움
 export function nextMonthFrom(prev, id) {
   const clone = JSON.parse(JSON.stringify(prev));
   const fresh = (items) => items.map((it) => ({ ...it, id: it.auto ? it.id : uid() }));
@@ -121,26 +118,9 @@ export function nextMonthFrom(prev, id) {
     cats: clone.cats.map((c) => ({ ...c, items: fresh(c.items) })),
     log: [],
     memo: clone.memo || '',
-    done: {},
   };
 }
 
-// 이체리스트: 분류 합계로 보내거나(total) 항목별로 보내기(items)
-export function transferRows(month) {
-  const rows = [];
-  for (const c of month.cats) {
-    if (c.transfer === 'items') {
-      for (const it of c.items) {
-        const amount = itemAmount(month, it);
-        if (amount) rows.push({ key: `${c.id}:${it.id}`, cat: c.id, item: it.id, name: it.name, group: c.name, amount, account: it.account || '' });
-      }
-    } else {
-      const amount = catTotal(month, c);
-      if (amount) rows.push({ key: c.id, cat: c.id, name: c.name, amount, account: c.account || '' });
-    }
-  }
-  return rows;
-}
 
 // 구글시트에서 복사해 붙여넣은 "날짜 / 항목 / 금액" 줄을 생활비 내역으로 변환
 export function parsePasted(text, monthId) {
