@@ -11,6 +11,10 @@ const store = {
   get: (k, d = null) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+const FACE = { 전체: '🌈', 같이: '💞', 상화: '🐻', 인화: '🐰' };
+const who = (w) => `${FACE[w] || ''} ${w}`;
+const CAT_EMOJI = [[/수입/, '💰'], [/고정비/, '📌'], [/모임/, '🥂'], [/대출/, '🏦'], [/용돈|생활비/, '🛍️'], [/적금|저축/, '🐷'], [/공과금/, '💡'], [/521|FRAMEWORK/i, '🎬'], [/기타/, '✨']];
+const catEmoji = (name) => (CAT_EMOJI.find(([re]) => re.test(name)) || [null, '🏷️'])[1];
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -110,7 +114,7 @@ async function createMonth() {
     const j = S.mode === 'local' ? local.create(S.monthId) : await remote('POST', { month: S.monthId, create: true });
     S.month = j.month; S.months = j.months;
     render();
-    toast(`${monthLabel(S.monthId)} 가계부를 시작했어요`);
+    toast(`${monthLabel(S.monthId)} 가계부를 시작했어요 🎉`);
   } catch (e) { toast(e.message); }
 }
 
@@ -182,7 +186,7 @@ function render() {
     <header class="top">
       <div class="brand">
         <span class="logo">상화 <i>&amp;</i> 인화네</span>
-        <button class="me me-${esc(S.me)}" data-act="switch-me" title="사용자 바꾸기">${esc(S.me)}</button>
+        <button class="me me-${esc(S.me)}" data-act="switch-me" title="사용자 바꾸기">${who(S.me)}</button>
       </div>
       <div class="monthnav">
         <button class="icon" data-act="month" data-d="-1" aria-label="이전 달">‹</button>
@@ -210,7 +214,7 @@ function renderLogin() {
         <h1>상화 &amp; 인화네 가계부</h1>
         <p>누가 쓰고 있나요?</p>
         <div class="who-pick">
-          ${PEOPLE.map((p) => `<button class="pick pick-${p} ${S.me === p ? 'on' : ''}" data-act="pick" data-who="${p}">${p}</button>`).join('')}
+          ${PEOPLE.map((p) => `<button class="pick pick-${p} ${S.me === p ? 'on' : ''}" data-act="pick" data-who="${p}"><span class="pick-face">${FACE[p]}</span>${p}</button>`).join('')}
         </div>
         ${S.needKey ? `
           <form class="keyform" data-form="key">
@@ -228,7 +232,7 @@ function emptyMonth() {
   const src = prev || S.months[0];
   return `
     <section class="empty">
-      <p class="empty-title">${monthLabel(S.monthId)} 가계부가 아직 없어요</p>
+      <p class="empty-title">${monthLabel(S.monthId)} 가계부가 아직 없어요 🌱</p>
       ${src ? `<p class="muted">${monthLabel(src)}의 고정비·적금 항목과 금액을 그대로 가져오고,<br>생활비 내역만 비워서 시작해요.</p>
       <button class="primary" data-act="create">${monthLabel(src).slice(6)} 내용으로 시작하기</button>` : ''}
     </section>`;
@@ -247,40 +251,40 @@ function viewHome(m) {
     .map((it) => ({ name: it.name, amount: itemAmount(m, it), who: guessWho(it.name) }));
   return `
     <section class="stats">
-      <div class="stat"><span>수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
-      <div class="stat"><span>총 지출</span><b>${fmt(t.expense)}</b></div>
+      <div class="stat"><span>💰 수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
+      <div class="stat"><span>💸 총 지출</span><b>${fmt(t.expense)}</b></div>
       <div class="stat big ${S.showIncome && t.balance < 0 ? 'neg' : ''}">
-        <span>남는 돈 <small>수입 − 지출</small></span>
+        <span>🐷 남는 돈 <small>수입 − 지출</small></span>
         ${secret(`<b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>`)}
         ${S.showIncome && t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
       </div>
     </section>
 
     <section class="card">
-      <div class="card-head"><h2>지출 구성</h2><span class="muted">저축 ${fmt(t.saving)}원 포함</span></div>
+      <div class="card-head"><h2>📊 지출 구성</h2><span class="muted">저축 ${fmt(t.saving)}원 포함</span></div>
       <ul class="bars">
         ${cats.map(({ c, v }) => `
           <li>
-            <div class="bar-label"><span>${esc(c.name)}</span><b>${fmt(v)}</b></div>
+            <div class="bar-label"><span>${catEmoji(c.name)} ${esc(c.name)}</span><b>${fmt(v)}</b></div>
             <div class="bar"><i class="${c.saving ? 'save' : ''}" style="width:${(v / max) * 100}%"></i></div>
-          </li>`).join('') || '<li class="muted">아직 지출이 없어요</li>'}
+          </li>`).join('') || '<li class="muted">아직 지출이 없어요 🍃</li>'}
       </ul>
     </section>
 
     <section class="card">
-      <div class="card-head"><h2>생활비</h2><button class="link" data-act="tab" data-tab="log">내역 보기 →</button></div>
+      <div class="card-head"><h2>🛒 생활비</h2><button class="link" data-act="tab" data-tab="log">내역 보기 →</button></div>
       <div class="living-total"><b>${fmt(living)}</b>원 <span class="muted">· ${m.log.length}건${days ? ` · 하루 평균 ${fmt(living / days)}원` : ''}</span></div>
       <div class="split">
         ${WHO.map((w) => {
           const v = logTotal(m, w);
-          return `<div class="split-part who-${w}" style="flex:${Math.max(v, 1)}"><span>${w}</span><b>${fmt(v)}</b></div>`;
+          return `<div class="split-part who-${w}" style="flex:${Math.max(v, 1)}"><span>${who(w)}</span><b>${fmt(v)}</b></div>`;
         }).join('')}
       </div>
     </section>
 
     ${allowance.length ? `
     <section class="card">
-      <div class="card-head"><h2>용돈</h2><button class="link" data-act="tab" data-tab="plan">예산표에서 수정 →</button></div>
+      <div class="card-head"><h2>🎁 용돈</h2><button class="link" data-act="tab" data-tab="plan">예산표에서 수정 →</button></div>
       <div class="living-total"><b>${fmt(allowance.reduce((s, a) => s + a.amount, 0))}</b>원</div>
       <div class="split">
         ${allowance.map((a) => `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b></div>`).join('')}
@@ -288,7 +292,7 @@ function viewHome(m) {
     </section>` : ''}
 
     <section class="card">
-      <div class="card-head"><h2>메모</h2><span class="muted">출금일 · 급여일 등</span></div>
+      <div class="card-head"><h2>📝 메모</h2><span class="muted">출금일 · 급여일 등</span></div>
       <textarea class="memo" data-field="memo" rows="${Math.min(12, Math.max(4, (m.memo || '').split('\n').length + 1))}" placeholder="카드 출금일, 급여일 같은 걸 적어두세요">${esc(m.memo)}</textarea>
     </section>`;
 }
@@ -308,7 +312,7 @@ function viewLog(m) {
         <div class="row">
           <input type="date" name="date" value="${defDate}" min="${m.id}-01" max="${m.id}-31" required />
           <div class="seg" role="radiogroup" aria-label="누가 썼나요">
-            ${WHO.map((w) => `<button type="button" class="seg-${w} ${S.addWho === w ? 'on' : ''}" data-act="add-who" data-who="${w}">${w}</button>`).join('')}
+            ${WHO.map((w) => `<button type="button" class="seg-${w} ${S.addWho === w ? 'on' : ''}" data-act="add-who" data-who="${w}">${who(w)}</button>`).join('')}
           </div>
         </div>
         <div class="row">
@@ -322,7 +326,7 @@ function viewLog(m) {
     </section>
 
     <div class="filters">
-      ${['전체', ...WHO].map((w) => `<button class="chip ${f === w ? 'on' : ''}" data-act="filter" data-who="${w}">${w}</button>`).join('')}
+      ${['전체', ...WHO].map((w) => `<button class="chip ${f === w ? 'on' : ''}" data-act="filter" data-who="${w}">${who(w)}</button>`).join('')}
       <span class="filter-sum">${fmt(list.reduce((s, e) => s + (Number(e.amount) || 0), 0))}원</span>
     </div>
 
@@ -337,7 +341,7 @@ function viewLog(m) {
               <b>${fmt(e.amount)}</b>
             </li>`).join('')}
         </ul>
-      </section>`).join('') || '<p class="empty muted">아직 내역이 없어요</p>'}
+      </section>`).join('') || '<p class="empty muted">아직 내역이 없어요 🍃</p>'}
 
     <div class="log-tools">
       <button class="ghost" data-act="paste">구글시트에서 붙여넣기</button>
@@ -350,13 +354,13 @@ function catCard(m, c, isIncome = false) {
   if (isIncome && !S.showIncome) {
     return `
       <section class="card cat income locked">
-        <div class="card-head"><h2>수입</h2>${secret('', 'compact')}</div>
+        <div class="card-head"><h2>💰 수입</h2>${secret('', 'compact')}</div>
       </section>`;
   }
   return `
     <section class="card cat ${isIncome ? 'income' : ''} ${c.saving ? 'saving' : ''}">
       <div class="card-head">
-        ${isIncome ? `<h2>수입 <button class="link" data-act="reveal">숨기기</button></h2>` : `<input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
+        ${isIncome ? `<h2>💰 수입 <button class="link" data-act="reveal">숨기기</button></h2>` : `<span class="cat-emoji">${catEmoji(c.name)}</span><input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
         <b class="cat-total">${fmt(total)}</b>
         ${isIncome ? '' : `<button class="icon small" data-act="cat-menu" data-cat="${c.id}" aria-label="분류 설정">⋯</button>`}
       </div>
@@ -381,9 +385,9 @@ function viewPlan(m) {
   const t = totals(m);
   return `
     <div class="plan-sum">
-      <div><span>수입</span>${secret(`<b>${fmt(t.income)}</b>`, 'compact')}</div>
-      <div><span>지출</span><b>${fmt(t.expense)}</b></div>
-      <div class="${S.showIncome && t.balance < 0 ? 'neg' : ''}"><span>남는 돈</span>${secret(`<b>${fmt(t.balance)}</b>`, 'compact')}</div>
+      <div><span>💰 수입</span>${secret(`<b>${fmt(t.income)}</b>`, 'compact')}</div>
+      <div><span>💸 지출</span><b>${fmt(t.expense)}</b></div>
+      <div class="${S.showIncome && t.balance < 0 ? 'neg' : ''}"><span>🐷 남는 돈</span>${secret(`<b>${fmt(t.balance)}</b>`, 'compact')}</div>
     </div>
     <p class="hint">금액 칸에 <code>15000+3000</code>처럼 식을 넣어도 계산돼요.</p>
     <div class="grid">
@@ -413,13 +417,13 @@ function editLog(id) {
   const e = S.month.log.find((x) => x.id === id);
   if (!e) return;
   openSheet(`
-    <h2>생활비 수정</h2>
+    <h2>✏️ 생활비 수정</h2>
     <label>날짜<input type="date" name="date" value="${e.date}" /></label>
     <label>항목<input name="name" value="${esc(e.name)}" required /></label>
     <label>금액<input name="amount" inputmode="numeric" value="${fmt(e.amount)}" /></label>
     <label>메모<input name="note" value="${esc(e.note)}" placeholder="선택" /></label>
     <fieldset class="seg-field"><legend>누가</legend>
-      ${WHO.map((w) => `<label class="radio seg-${w}"><input type="radio" name="who" value="${w}" ${e.who === w ? 'checked' : ''} /><span>${w}</span></label>`).join('')}
+      ${WHO.map((w) => `<label class="radio seg-${w}"><input type="radio" name="who" value="${w}" ${e.who === w ? 'checked' : ''} /><span>${who(w)}</span></label>`).join('')}
     </fieldset>
     <div class="sheet-actions">
       <button value="delete" class="danger" formnovalidate>삭제</button>
@@ -427,7 +431,7 @@ function editLog(id) {
       <button value="cancel" class="ghost" formnovalidate>취소</button>
       <button value="save" class="primary">저장</button>
     </div>`, (action, fd) => {
-    if (action === 'delete') { commit({ type: 'delLog', id }); toast('삭제했어요'); return; }
+    if (action === 'delete') { commit({ type: 'delLog', id }); toast('🗑️ 삭제했어요'); return; }
     const amount = parseAmount(fd.get('amount'));
     if (Number.isNaN(amount)) { toast('금액을 확인해주세요'); return false; }
     commit({ type: 'setLog', id, patch: { date: fd.get('date'), name: fd.get('name').trim(), amount, note: fd.get('note').trim(), who: fd.get('who') } });
@@ -461,7 +465,7 @@ function catMenu(catId) {
 
 function pasteDialog() {
   openSheet(`
-    <h2>구글시트에서 붙여넣기</h2>
+    <h2>📋 구글시트에서 붙여넣기</h2>
     <p class="muted small">시트에서 <b>날짜 · 항목 · 금액</b> 세 칸을 드래그해서 복사한 뒤 아래에 붙여넣으세요. 날짜가 빈 줄은 윗줄 날짜를 따르고, "인화_", "상화_"로 시작하면 사람도 자동으로 정해져요.</p>
     <textarea name="text" rows="8" placeholder="9/1	인화_메가커피	2000"></textarea>
     <div class="sheet-actions">
@@ -472,7 +476,7 @@ function pasteDialog() {
     const entries = parsePasted(fd.get('text') || '', S.month.id);
     if (!entries.length) { toast('읽을 수 있는 줄이 없어요'); return false; }
     commit({ type: 'addLog', entries });
-    toast(`${entries.length}건 추가했어요`);
+    toast(`${entries.length}건 추가했어요 ✨`);
   });
 }
 
@@ -563,7 +567,7 @@ $app.addEventListener('submit', (ev) => {
     const name = fd.get('name').trim();
     const who = S.addWho === '같이' ? guessWho(name) : S.addWho;
     commit({ type: 'addLog', entry: { id: uid(), date: fd.get('date'), name, amount, who, note: '', by: S.me } });
-    toast(`${name} ${fmt(amount)}원 추가`);
+    toast(`✅ ${name} ${fmt(amount)}원 추가`);
     const date = fd.get('date');
     render();
     const f = document.querySelector('[data-form="add-log"]');

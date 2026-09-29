@@ -249,3 +249,15 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
   .stat.big { grid-column: auto; }
   main[data-tab] { gap: 16px; }
 }
+
+/* 이모티콘 */
+.cat .card-head { justify-content: flex-start; }
+.cat .card-head .cat-total { margin-left: auto; }
+.cat-emoji { font-size: 18px; line-height: 1; }
+.pick-face { display: block; font-size: 40px; line-height: 1.1; margin-bottom: 6px; }
+.pick { padding: 20px 0; }
+.login-mark { animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .login-mark { animation: none; } }
+.cat .card-head .secret.compact { margin-left: auto; }
+.cat-emoji + .cat-name { margin-left: -2px; }
