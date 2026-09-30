@@ -426,3 +426,11 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
 .split-bar .fixed { background: var(--sang); }
 .split-bar .var { background: var(--in); }
 .spend3-note { margin: 0; line-height: 1.6; font-size: 12px; }
+
+/* 결혼 준비 칸 (2026년 12월까지) */
+.who-결혼 { background: #fbe7ee; } .who-결혼 span { color: #c9587c; }
+@media (prefers-color-scheme: dark) { .who-결혼 { background: #3d2530; } .who-결혼 span { color: #f09ab6; } }
+.split { flex-wrap: wrap; }
+.split-part { min-width: 64px; }
+.split-part { min-width: 0; padding: 10px; }
+.split-part b { font-size: 14px; white-space: nowrap; }

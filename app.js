@@ -13,7 +13,7 @@ const store = {
   get: (k, d = null) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-const FACE = { 전체: '🌈', 같이: '💞', 상화: '🐻', 인화: '🐰' };
+const FACE = { 전체: '🌈', 같이: '💞', 상화: '🐻', 인화: '🐰', 결혼: '💍' };
 const who = (w) => `${FACE[w] || ''} ${w}`;
 const CAT_EMOJI = [[/수입/, '💰'], [/고정비/, '📌'], [/모임/, '🥂'], [/대출/, '🏦'], [/용돈|생활비/, '🛍️'], [/적금|저축/, '🐷'], [/공과금/, '💡'], [/521|FRAMEWORK/i, '🎬'], [/기타/, '✨']];
 const catEmoji = (name) => (CAT_EMOJI.find(([re]) => re.test(name)) || [null, '🏷️'])[1];
@@ -306,10 +306,7 @@ function viewHome(m) {
       <div class="card-head"><h2>🛒 생활비</h2><button class="link" data-act="tab" data-tab="log">내역 보기 →</button></div>
       <div class="living-total"><b>${fmt(living)}</b>원 <span class="muted">· ${m.log.length}건${days ? ` · 하루 평균 ${fmt(living / days)}원` : ''}</span></div>
       <div class="split">
-        ${WHO.map((w) => {
-          const v = logTotal(m, w);
-          return `<div class="split-part who-${w}" style="flex:${Math.max(v, 1)}"><span>${who(w)}</span><b>${fmt(v)}</b></div>`;
-        }).join('')}
+        ${livingSplit(m).map(({ w, v }, _, all) => `<div class="split-part who-${w}" style="flex:${all.length > 3 ? 1 : Math.max(v, 1)}"><span>${who(w)}</span><b>${fmt(v)}</b></div>`).join('')}
       </div>
     </section>
 
@@ -495,6 +492,18 @@ function viewPlan(m) {
       ${m.cats.map((c) => catCard(m, c)).join('')}
     </div>
     <button class="ghost wide" data-act="add-cat">+ 분류 추가</button>`;
+}
+
+// 요약의 생활비 나눠 보기: 같이 / 상화 / 인화, 결혼 준비 기간(2026년 12월까지)에는
+// 💍 결혼 카테고리 내역을 사람별에서 빼서 따로 한 칸으로 보여준다.
+const WEDDING_UNTIL = '2026-12';
+function livingSplit(m) {
+  const wedding = m.id <= WEDDING_UNTIL;
+  const sum = (pred) => m.log.reduce((s, e) => (pred(e) ? s + (Number(e.amount) || 0) : s), 0);
+  const isW = (e) => wedding && spendCat(e).id === 'wedding';
+  const parts = WHO.map((w) => ({ w, v: sum((e) => e.who === w && !isW(e)) }));
+  if (wedding) parts.push({ w: '결혼', v: sum(isW) });
+  return parts;
 }
 
 /* ---- 용돈 ---- */
