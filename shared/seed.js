@@ -100,7 +100,7 @@ export function seedMonth() {
       { id: 'c-ifix', name: '인화 고정비', items: [it('실비 보험1', 15380), it('건강 보험2', 37830), it('화재 보험', 11840), it('통신비', 50500), it('클로드', 30292)] },
       { id: 'c-meet', name: '모임', items: [it('친구들 모임'), it('가족들 모임')] },
       { id: 'c-loan', name: '대출', items: [it('원리금+이자', 1254529)] },
-      { id: 'c-life', name: '용돈&생활비', items: [it('상화 용돈', 152000), it('인화 용돈', 342780), { id: 'living', name: '생활비', auto: 'log' }] },
+      { id: 'c-life', name: '용돈&생활비', items: [it('상화 용돈', 300000), it('인화 용돈', 300000), { id: 'living', name: '생활비', auto: 'log' }] },
       { id: 'c-goal', name: '목적적금', saving: true, items: [it('자동차 적금'), it('자동차 보험 적금'), it('경조사비')] },
       { id: 'c-save', name: '순수적금', saving: true, items: [it('단기 적금 1년'), it('단기 적금 1년'), it('장기 적금 5년'), it('인화 적금', 500000)] },
       { id: 'c-util', name: '공과금', items: [it('가전구독', 24300), it('관리비'), it('인터넷', 14300), it('가스비'), it('주유비')] },
