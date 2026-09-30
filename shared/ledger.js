@@ -38,13 +38,21 @@ export const itemAmount = (month, item) =>
 export const catTotal = (month, cat) =>
   cat.items.reduce((s, it) => s + itemAmount(month, it), 0);
 
+// 매달 정해져 나가는 돈(고정비). 분류 설정(⋯)에서 직접 바꾼 값이 있으면 그걸 따르고,
+// 없으면 이름으로 판단한다: 상화/인화 고정비, 공과금, 적금, 대출, 521 FRAMEWORK 등
+const FIXED_RE = /고정비|공과금|적금|저축|대출|보험|관리비|월세|521|FRAMEWORK/i;
+export const isFixedCat = (cat) => cat.fixed ?? FIXED_RE.test(cat.name);
+
 export function totals(month) {
   const income = catTotal(month, month.income);
   const expense = month.cats.reduce((s, c) => s + catTotal(month, c), 0);
   const saving = month.cats
     .filter((c) => c.saving)
     .reduce((s, c) => s + catTotal(month, c), 0);
-  return { income, expense, saving, balance: income - expense };
+  const fixed = month.cats
+    .filter(isFixedCat)
+    .reduce((s, c) => s + catTotal(month, c), 0);
+  return { income, expense, saving, fixed, variable: expense - fixed, balance: income - expense };
 }
 
 function findCat(month, catId) {

@@ -1,7 +1,7 @@
 import {
   PEOPLE, WHO, uid, fmt, monthLabel, shiftMonth, parseAmount, logTotal, itemAmount,
   catTotal, totals, applyOp, nextMonthFrom, parsePasted, guessWho,
-  SPEND_CATS, spendCat, spendByCat, guessSpendCat, allowanceOf,
+  SPEND_CATS, spendCat, spendByCat, guessSpendCat, allowanceOf, isFixedCat,
 } from './shared/ledger.js';
 import { seedMonth } from './shared/seed.js';
 import { parseICS, expandEvents, byDay } from './shared/ical.js';
@@ -269,12 +269,26 @@ function viewHome(m) {
   return `
     <section class="stats">
       <div class="stat"><span>💰 수입</span>${secret('home-income', `<b>${fmt(t.income)}</b>`)}</div>
-      <div class="stat"><span>💸 총 지출</span><b>${fmt(t.expense)}</b></div>
       <div class="stat big ${isShown('home-balance') && t.balance < 0 ? 'neg' : ''}">
         <span>🐷 남는 돈 <small>수입 − 지출</small></span>
         ${secret('home-balance', `<b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>`)}
         ${isShown('home-balance') && t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
       </div>
+    </section>
+
+    <section class="card spend3">
+      <div class="spend3-row">
+        <div class="s3 total"><span>💸 총 지출</span><b>${fmt(t.expense)}</b></div>
+        <div class="s3 fixed"><span>📌 고정비</span><b>${fmt(t.fixed)}</b></div>
+        <div class="s3 var"><span>🛍️ 따로 쓴 돈</span><b>${fmt(t.variable)}</b></div>
+      </div>
+      <div class="split-bar" aria-hidden="true">
+        <i class="fixed" style="flex:${Math.max(t.fixed, 0)}"></i><i class="var" style="flex:${Math.max(t.variable, 0)}"></i>
+      </div>
+      <p class="muted small spend3-note">
+        고정비: ${m.cats.filter(isFixedCat).map((c) => esc(c.name)).join(', ') || '없음'}<br>
+        따로 쓴 돈: ${m.cats.filter((c) => !isFixedCat(c)).map((c) => esc(c.name)).join(', ') || '없음'}
+      </p>
     </section>
 
     <section class="card">
@@ -870,6 +884,7 @@ function catMenu(catId) {
   const hasAuto = c.items.some((i) => i.auto);
   openSheet(`
     <h2>${esc(c.name)}</h2>
+    <label class="toggle"><input type="checkbox" name="fixed" ${isFixedCat(c) ? 'checked' : ''} /> 📌 고정비로 집계 (끄면 요약에서 '따로 쓴 돈'으로)</label>
     <label class="toggle"><input type="checkbox" name="saving" ${c.saving ? 'checked' : ''} /> 저축으로 집계 (요약의 저축 금액에 포함)</label>
     <div class="sheet-row">
       <button value="up" class="ghost" formnovalidate>↑ 위로</button>
@@ -886,7 +901,7 @@ function catMenu(catId) {
       if (!confirm(`'${c.name}' 분류와 항목을 모두 지울까요?`)) return false;
       commit({ type: 'delCat', cat: catId }); return;
     }
-    commit({ type: 'setCat', cat: catId, patch: { saving: fd.get('saving') === 'on' } });
+    commit({ type: 'setCat', cat: catId, patch: { saving: fd.get('saving') === 'on', fixed: fd.get('fixed') === 'on' } });
   });
 }
 
