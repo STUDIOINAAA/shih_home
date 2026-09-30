@@ -187,6 +187,7 @@ const secret = (html, cls = '') => S.showIncome
   : `<button class="secret ${cls}" data-act="reveal" aria-label="탭해서 수입 보기"><span class="dots">••••••</span><small>탭해서 보기</small></button>`;
 
 function render() {
+  EVREG.length = 0;
   if (!S.me || S.needKey) return renderLogin();
   const m = S.month;
   $app.innerHTML = `
@@ -615,17 +616,52 @@ const hhmm = (d) => `${d.getHours() < 12 ? '오전' : '오후'} ${((d.getHours()
 const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DOW = '일월화수목금토';
 
+// 화면에 그린 일정을 번호로 기억해 두었다가, 누르면 메모까지 자세히 보여준다 (render마다 비움)
+const EVREG = [];
+
 function eventRow(e, { showDate = false } = {}) {
   const when = e.allDay ? '하루 종일' : hhmm(e.start);
+  const k = EVREG.push(e) - 1;
   return `
-    <li class="ev" style="--c:${e.color}">
+    <li class="ev" style="--c:${e.color}" data-act="ev-detail" data-k="${k}" tabindex="0">
       <span class="ev-bar"></span>
       <div class="ev-main">
         <div class="ev-title">${esc(e.title)}</div>
         <div class="ev-sub">${showDate ? `${e.start.getMonth() + 1}/${e.start.getDate()}(${DOW[e.start.getDay()]}) · ` : ''}${when}${e.location ? ` · 📍 ${esc(e.location)}` : ''}</div>
+        ${e.note ? `<div class="ev-note">📝 ${esc(e.note)}</div>` : ''}
       </div>
       <span class="ev-cal">${esc(e.calName)}</span>
     </li>`;
+}
+
+const fullDate = (d) => `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
+
+function eventDetail(k) {
+  const e = EVREG[k];
+  if (!e) return;
+  const lastDay = new Date(e.end.getTime() - (e.allDay ? 1 : 0));
+  const sameDay = dateKey(e.start) === dateKey(lastDay);
+  const when = e.allDay
+    ? `${fullDate(e.start)}${sameDay ? '' : ` ~ ${fullDate(lastDay)}`} · 하루 종일`
+    : `${fullDate(e.start)} ${hhmm(e.start)} ~ ${sameDay ? '' : `${fullDate(e.end)} `}${hhmm(e.end)}`;
+  const safeUrl = /^https?:\/\//i.test(e.url) ? e.url : '';
+  openSheet(`
+    <div class="ev-detail" style="--c:${e.color}">
+      <span class="ev-cal">${esc(e.calName)} 캘린더</span>
+      <h2>${esc(e.title)}</h2>
+      <p class="ev-when">🕒 ${when}</p>
+      ${e.location ? `<p>📍 ${esc(e.location)}</p>` : ''}
+      ${safeUrl ? `<p>🔗 <a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(safeUrl)}</a></p>` : ''}
+      <div class="ev-memo">
+        <small>📝 메모</small>
+        <p>${e.note ? esc(e.note) : '<span class="muted">메모가 없어요</span>'}</p>
+      </div>
+    </div>
+    <p class="muted small">일정 수정은 아이폰 캘린더에서 해주세요.</p>
+    <div class="sheet-actions">
+      <span></span><span></span>
+      <button value="cancel" class="primary" formnovalidate>닫기</button>
+    </div>`, () => {});
 }
 
 function viewCal() {
@@ -917,12 +953,14 @@ $app.addEventListener('click', (ev) => {
     case 'cal-day': C.day = d.day; render(); break;
     case 'cal-refresh': loadCalendars(true).then(() => toast('🔄 일정을 새로 불러왔어요')); break;
     case 'cal-settings': calSettings(); break;
+    case 'ev-detail': eventDetail(Number(d.k)); break;
   }
 });
 
 $app.addEventListener('keydown', (ev) => {
   if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('li[data-act="edit-log"]')) { ev.preventDefault(); editLog(ev.target.dataset.id); }
   if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('li[data-act="edit-allow"]')) { ev.preventDefault(); editAllow(ev.target.dataset.id); }
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('li[data-act="ev-detail"]')) { ev.preventDefault(); eventDetail(Number(ev.target.dataset.k)); }
   if (ev.key === 'Enter' && ev.target.matches('input[data-field]')) ev.target.blur();
 });
 

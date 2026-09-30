@@ -50,6 +50,7 @@ export function parseICS(text) {
       case 'SUMMARY': ev.title = unescapeText(p.value); break;
       case 'LOCATION': ev.location = unescapeText(p.value); break;
       case 'DESCRIPTION': ev.note = unescapeText(p.value); break;
+      case 'URL': ev.url = p.value; break;
       case 'STATUS': ev.status = p.value; break;
       case 'DTSTART': { const d = parseDate(p.value, p.params); if (d) { ev.start = d.date; ev.allDay = d.allDay; } break; }
       case 'DTEND': { const d = parseDate(p.value, p.params); if (d) ev.end = d.date; break; }
@@ -158,7 +159,7 @@ export function expandEvents(events, from, to, extra = {}) {
   return out.sort((a, b) => a.start - b.start || (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0));
 }
 
-const pick = (e) => ({ uid: e.uid, title: e.title || '(제목 없음)', location: e.location || '', note: e.note || '', allDay: !!e.allDay });
+const pick = (e) => ({ uid: e.uid, title: e.title || '(제목 없음)', location: e.location || '', note: e.note || '', url: e.url || '', allDay: !!e.allDay });
 
 // 여러 날에 걸친 일정을 날짜(YYYY-MM-DD)별로 나눠 담기
 export function byDay(list) {

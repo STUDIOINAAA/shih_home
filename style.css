@@ -397,3 +397,15 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
 @media (min-width: 600px) { .allow-form { grid-template-columns: auto 150px 1fr 130px auto !important; } .allow-form .seg { grid-column: auto; } }
 .allow-form .seg { order: -2; }
 @media (min-width: 600px) { .allow-form .seg { order: 0; } }
+
+/* 일정 메모 */
+.ev { cursor: pointer; border-radius: 8px; }
+.ev:hover, .ev:focus-visible { background: var(--soft); outline: none; }
+.ev-note { font-size: 12px; color: var(--sub); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-detail { display: flex; flex-direction: column; gap: 6px; border-left: 4px solid var(--c); padding-left: 12px; }
+.ev-detail h2 { margin: 0; }
+.ev-detail p { margin: 0; font-size: 14px; word-break: break-all; }
+.ev-detail a { color: var(--accent); }
+.ev-when { font-weight: 600; }
+.ev-memo { background: var(--soft); border-radius: 12px; padding: 10px 12px; margin-top: 6px; }
+.ev-memo p { white-space: pre-wrap; line-height: 1.6; margin-top: 4px; max-height: 45vh; overflow: auto; }
