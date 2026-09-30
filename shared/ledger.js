@@ -151,7 +151,7 @@ export function parsePasted(text, monthId) {
 // 위에서부터 먼저 맞는 카테고리로 들어가므로 순서가 중요하다.
 export const SPEND_CATS = [
   { id: 'gift', name: '경조사·선물', emoji: '🎁', color: '#d9a441', re: /경조사|축의|부조|선물/ },
-  { id: 'wedding', name: '결혼 준비', emoji: '💍', color: '#e38aa5', re: /청첩|청모|봉투|스티커|웨딩|드레스/ },
+  { id: 'wedding', name: '결혼 준비', emoji: '💍', color: '#e38aa5', re: /청첩|청모|\d+매|스티커|웨딩|드레스/ },
   { id: 'work', name: '521 FRAMEWORK', emoji: '🎬', color: '#8a7fd1', re: /521|dji|프레임워크/i },
   { id: 'car', name: '차량·교통', emoji: '🚗', color: '#5f8fb8', re: /주유|주차|엔진오일|세차|톨게이트|하이패스|택시|버스|지하철|교통/ },
   { id: 'digital', name: '구독·디지털', emoji: '📱', color: '#6fb3c9', re: /애플|icloud|클라우드|카카오톡|구독|넷플릭스|유튜브|쿠팡플레이|티빙/i },

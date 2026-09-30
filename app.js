@@ -300,8 +300,8 @@ function viewHome(m) {
 }
 
 /* ---- 생활비 ---- */
-// 카테고리별 도넛 그래프. 조각이나 범례를 누르면 아래 목록이 그 카테고리로 걸러진다.
-function donutCard(pie) {
+// 카테고리별 도넛 그래프. 조각이나 범례를 누르면 그 카테고리 내역이 범례 아래에 펼쳐진다.
+function donutCard(pie, entries) {
   const total = pie.reduce((s, c) => s + c.amount, 0);
   const sel = pie.find((c) => c.id === S.catFilter);
   const R = 15.9155; // 둘레 100
@@ -335,7 +335,20 @@ function donutCard(pie) {
                 <i style="background:${c.color}"></i>
                 <span class="lg-name">${c.emoji} ${esc(c.name)} <small>${c.count}건</small></span>
                 <span class="lg-num"><b>${fmt(c.amount)}</b><small>${Math.round((c.amount / total) * 100)}%</small></span>
+                <span class="lg-caret" aria-hidden="true">${sel?.id === c.id ? '▴' : '▾'}</span>
               </button>
+              ${sel?.id === c.id ? `
+                <ul class="lg-items">
+                  ${entries.filter((e) => spendCat(e).id === c.id)
+                    .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))
+                    .map((e) => `
+                      <li data-act="edit-log" data-id="${e.id}" tabindex="0">
+                        <span class="lg-date">${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8))}</span>
+                        <span class="dot who-${esc(e.who)}" title="${esc(e.who)}"></span>
+                        <span class="log-name">${esc(e.name)}</span>
+                        <b>${fmt(e.amount)}</b>
+                      </li>`).join('')}
+                </ul>` : ''}
             </li>`).join('')}
         </ul>
       </div>
@@ -347,7 +360,7 @@ function viewLog(m) {
   const byWho = m.log.filter((e) => f === '전체' || e.who === f);
   const pie = spendByCat(byWho);
   if (S.catFilter && !pie.some((c) => c.id === S.catFilter)) S.catFilter = null;
-  const list = byWho.filter((e) => !S.catFilter || spendCat(e).id === S.catFilter);
+  const list = byWho;
   const groups = {};
   for (const e of list) (groups[e.date] ||= []).push(e);
   const dates = Object.keys(groups).sort().reverse();
@@ -377,7 +390,7 @@ function viewLog(m) {
       <span class="filter-sum">${fmt(list.reduce((s, e) => s + (Number(e.amount) || 0), 0))}원</span>
     </div>
 
-    ${pie.length ? donutCard(pie) : ''}
+    ${pie.length ? donutCard(pie, byWho) : ''}
 
     ${dates.map((d) => `
       <section class="day">
