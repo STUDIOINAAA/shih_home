@@ -31,7 +31,7 @@ const S = {
   month: null,
   months: [],
   tab: ['home', 'log', 'allow', 'plan', 'cal'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
-  showIncome: false,
+  shown: new Set(), // 탭해서 공개한 칸들 (칸마다 따로)
   whoFilter: '전체',
   catFilter: null,
   allowWho: null,
@@ -173,18 +173,30 @@ const TABS = [
   ['cal', '일정', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/>'],
 ];
 
-// 수입과 남는 돈(수입이 역산되는 값)은 탭하기 전까지 가려둔다
+// 수입과 남는 돈(수입이 역산되는 값)은 탭하기 전까지 가려둔다.
+// 칸마다 따로 열리고(한 번 탭에 하나만 공개), 다시 탭하거나 30초가 지나면 그 칸만 다시 가려진다.
 const HIDE_AFTER = 30000;
-let hideTimer;
-function revealIncome(on) {
-  S.showIncome = on;
-  clearTimeout(hideTimer);
-  if (on) hideTimer = setTimeout(() => { S.showIncome = false; if (!isEditing()) render(); }, HIDE_AFTER);
+const hideTimers = new Map();
+const isShown = (key) => S.shown.has(key);
+function toggleSecret(key) {
+  clearTimeout(hideTimers.get(key));
+  if (S.shown.has(key)) {
+    S.shown.delete(key);
+  } else {
+    S.shown.add(key);
+    if (key !== 'plan-card') hideTimers.set(key, // 수입 입력 칸은 입력 중에 닫히지 않도록 자동으로 가리지 않음
+setTimeout(() => { S.shown.delete(key); if (!isEditing()) render(); }, HIDE_AFTER));
+  }
   render();
 }
-const secret = (html, cls = '') => S.showIncome
-  ? `<button class="secret shown ${cls}" data-act="reveal" aria-label="수입 숨기기">${html}</button>`
-  : `<button class="secret ${cls}" data-act="reveal" aria-label="탭해서 수입 보기"><span class="dots">••••••</span><small>탭해서 보기</small></button>`;
+function hideAllSecrets() {
+  hideTimers.forEach(clearTimeout);
+  hideTimers.clear();
+  S.shown.clear();
+}
+const secret = (key, html, cls = '') => isShown(key)
+  ? `<button class="secret shown ${cls}" data-act="reveal" data-key="${key}" aria-label="다시 가리기">${html}</button>`
+  : `<button class="secret ${cls}" data-act="reveal" data-key="${key}" aria-label="탭해서 보기"><span class="dots">••••••</span><small>탭해서 보기</small></button>`;
 
 function render() {
   EVREG.length = 0;
@@ -256,12 +268,12 @@ function viewHome(m) {
   const asum = allowSummary(m);
   return `
     <section class="stats">
-      <div class="stat"><span>💰 수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
+      <div class="stat"><span>💰 수입</span>${secret('home-income', `<b>${fmt(t.income)}</b>`)}</div>
       <div class="stat"><span>💸 총 지출</span><b>${fmt(t.expense)}</b></div>
-      <div class="stat big ${S.showIncome && t.balance < 0 ? 'neg' : ''}">
+      <div class="stat big ${isShown('home-balance') && t.balance < 0 ? 'neg' : ''}">
         <span>🐷 남는 돈 <small>수입 − 지출</small></span>
-        ${secret(`<b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>`)}
-        ${S.showIncome && t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
+        ${secret('home-balance', `<b>${t.balance < 0 ? '−' : ''}${fmt(Math.abs(t.balance))}<em>원</em></b>`)}
+        ${isShown('home-balance') && t.income === 0 ? `<button class="link" data-act="tab" data-tab="plan">수입을 입력하면 남는 돈이 계산돼요 →</button>` : ''}
       </div>
     </section>
 
@@ -425,16 +437,16 @@ function viewLog(m) {
 /* ---- 월 예산표 ---- */
 function catCard(m, c, isIncome = false) {
   const total = catTotal(m, c);
-  if (isIncome && !S.showIncome) {
+  if (isIncome && !isShown('plan-card')) {
     return `
       <section class="card cat income locked">
-        <div class="card-head"><h2>💰 수입</h2>${secret('', 'compact')}</div>
+        <div class="card-head"><h2>💰 수입</h2>${secret('plan-card', '', 'compact')}</div>
       </section>`;
   }
   return `
     <section class="card cat ${isIncome ? 'income' : ''} ${c.saving ? 'saving' : ''}">
       <div class="card-head">
-        ${isIncome ? `<h2>💰 수입 <button class="link" data-act="reveal">숨기기</button></h2>` : `<span class="cat-emoji">${catEmoji(c.name)}</span><input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
+        ${isIncome ? `<h2>💰 수입 <button class="link" data-act="reveal" data-key="plan-card">숨기기</button></h2>` : `<span class="cat-emoji">${catEmoji(c.name)}</span><input class="cat-name" value="${esc(c.name)}" data-field="cat-name" data-cat="${c.id}" aria-label="분류 이름" />`}
         <b class="cat-total">${fmt(total)}</b>
         ${isIncome ? '' : `<button class="icon small" data-act="cat-menu" data-cat="${c.id}" aria-label="분류 설정">⋯</button>`}
       </div>
@@ -459,9 +471,9 @@ function viewPlan(m) {
   const t = totals(m);
   return `
     <div class="plan-sum">
-      <div><span>💰 수입</span>${secret(`<b>${fmt(t.income)}</b>`, 'compact')}</div>
+      <div><span>💰 수입</span>${secret('plan-income', `<b>${fmt(t.income)}</b>`, 'compact')}</div>
       <div><span>💸 지출</span><b>${fmt(t.expense)}</b></div>
-      <div class="${S.showIncome && t.balance < 0 ? 'neg' : ''}"><span>🐷 남는 돈</span>${secret(`<b>${fmt(t.balance)}</b>`, 'compact')}</div>
+      <div class="${isShown('plan-balance') && t.balance < 0 ? 'neg' : ''}"><span>🐷 남는 돈</span>${secret('plan-balance', `<b>${fmt(t.balance)}</b>`, 'compact')}</div>
     </div>
     <p class="hint">금액 칸에 <code>15000+3000</code>처럼 식을 넣어도 계산돼요.</p>
     <div class="grid">
@@ -949,7 +961,7 @@ $app.addEventListener('click', (ev) => {
       input?.focus(); input?.select();
       break;
     }
-    case 'reveal': revealIncome(!S.showIncome); break;
+    case 'reveal': toggleSecret(d.key); break;
     case 'cal-day': C.day = d.day; render(); break;
     case 'cal-refresh': loadCalendars(true).then(() => toast('🔄 일정을 새로 불러왔어요')); break;
     case 'cal-settings': calSettings(); break;
@@ -1020,7 +1032,7 @@ setInterval(() => {
   if (document.visibilityState === 'visible' && S.me && S.month && S.pending === 0 && S.mode === 'remote') load(S.monthId, { quiet: true });
 }, 15000);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && S.showIncome) { S.showIncome = false; clearTimeout(hideTimer); render(); }
+  if (document.visibilityState === 'hidden' && S.shown.size) { hideAllSecrets(); render(); }
   if (document.visibilityState === 'visible' && S.me && S.pending === 0 && S.mode === 'remote') load(S.monthId, { quiet: true });
 });
 
