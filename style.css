@@ -343,3 +343,30 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
 .sw input:checked + span { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--card); }
 .sw input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cal-row input[name=url] { font-size: 12px; }
+
+/* 용돈 */
+.allow-head { border: 0; }
+.allow-head.who-상화 { background: var(--sang-soft); }
+.allow-head.who-인화 { background: var(--in-soft); }
+.allow-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 600; }
+.allow-head.who-상화 .allow-top span { color: var(--sang); }
+.allow-head.who-인화 .allow-top span { color: var(--in); }
+.allow-left { display: block; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 10px; }
+.allow-left em { font-style: normal; font-size: 16px; margin-left: 2px; }
+.allow-left.neg { color: var(--neg); }
+.allow-head .bar { background: color-mix(in srgb, var(--card) 70%, transparent); }
+.allow-head.who-상화 .bar i { background: var(--sang); }
+.allow-head.who-인화 .bar i { background: var(--in); }
+.allow-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--sub); margin-top: 6px; }
+.allow-form { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; }
+.allow-form input[name=name] { grid-column: 1 / -1; order: -1; }
+@media (min-width: 600px) { .allow-form { grid-template-columns: 150px 1fr 130px auto; } .allow-form input[name=name] { grid-column: auto; order: 0; } }
+.allow-form .primary { grid-column: 1 / -1; }
+@media (min-width: 600px) { .allow-form .primary { grid-column: auto; } }
+.allow-list { list-style: none; margin: 0; padding: 0; }
+.allow-list li { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-radius: 8px; cursor: pointer; }
+.allow-list li + li { border-top: 1px solid var(--line); }
+.allow-list li:hover, .allow-list li:focus-visible { background: var(--soft); outline: none; }
+.allow-list b { font-weight: 600; }
+.empty-row { justify-content: center; cursor: default !important; }
+.allow-mini { display: block; font-size: 11px; margin-top: 2px; }

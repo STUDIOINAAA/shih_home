@@ -1,7 +1,7 @@
 import {
   PEOPLE, WHO, uid, fmt, monthLabel, shiftMonth, parseAmount, logTotal, itemAmount,
   catTotal, totals, applyOp, nextMonthFrom, parsePasted, guessWho,
-  SPEND_CATS, spendCat, spendByCat, guessSpendCat,
+  SPEND_CATS, spendCat, spendByCat, guessSpendCat, allowanceOf,
 } from './shared/ledger.js';
 import { seedMonth } from './shared/seed.js';
 import { parseICS, expandEvents, byDay } from './shared/ical.js';
@@ -30,10 +30,11 @@ const S = {
   monthId: today().slice(0, 7),
   month: null,
   months: [],
-  tab: ['home', 'log', 'plan', 'cal'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
+  tab: ['home', 'log', 'allow', 'plan', 'cal'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
   showIncome: false,
   whoFilter: '전체',
   catFilter: null,
+  allowWho: null,
   addWho: '같이',
   pending: 0,
   error: '',
@@ -166,7 +167,8 @@ function toast(msg) {
 const TABS = [
   ['home', '요약', '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'],
   ['log', '생활비', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
-  ['plan', '월 예산표', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'],
+  ['allow', '용돈', '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18M12 7v13M12 7c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/>'],
+  ['plan', '예산표', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'],
   ['cal', '일정', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/>'],
 ];
 
@@ -288,10 +290,13 @@ function viewHome(m) {
 
     ${allowance.length ? `
     <section class="card">
-      <div class="card-head"><h2>🎁 용돈</h2><button class="link" data-act="tab" data-tab="plan">예산표에서 수정 →</button></div>
+      <div class="card-head"><h2>🎁 용돈</h2><button class="link" data-act="tab" data-tab="allow">기록 보기 →</button></div>
       <div class="living-total"><b>${fmt(allowance.reduce((s, a) => s + a.amount, 0))}</b>원</div>
       <div class="split">
-        ${allowance.map((a) => `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b></div>`).join('')}
+        ${allowance.map((a) => {
+          const st = PEOPLE.includes(a.who) ? allowanceOf(m, a.who) : null;
+          return `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b>${st?.spent ? `<small class="allow-mini">남은 ${fmt(st.left)}</small>` : ''}</div>`;
+        }).join('')}
       </div>
     </section>` : ''}
 
@@ -462,6 +467,73 @@ function viewPlan(m) {
       ${m.cats.map((c) => catCard(m, c)).join('')}
     </div>
     <button class="ghost wide" data-act="add-cat">+ 분류 추가</button>`;
+}
+
+/* ---- 용돈 ---- */
+// 생활비보다 간단하게: 날짜 · 어디에 · 얼마만. 사람별로 용돈(예산표 금액)에서 얼마 남았는지 보여준다.
+function viewAllow(m) {
+  const p = S.allowWho || S.me;
+  const a = allowanceOf(m, p);
+  const pct = a.budget ? Math.min(100, (a.spent / a.budget) * 100) : 0;
+  const list = [...a.entries].sort((x, y) => y.date.localeCompare(x.date));
+  const defDate = today().startsWith(m.id) ? today() : `${m.id}-01`;
+  return `
+    <div class="filters">
+      ${PEOPLE.map((w) => `<button class="chip ${p === w ? 'on' : ''}" data-act="allow-who" data-who="${w}">${who(w)}</button>`).join('')}
+    </div>
+
+    <section class="card allow-head who-${p}">
+      <div class="allow-top">
+        <span>${FACE[p]} ${p} 용돈 남은 돈</span>
+        ${a.budget ? `<small>${fmt(a.budget)}원 중</small>` : ''}
+      </div>
+      <b class="allow-left ${a.left < 0 ? 'neg' : ''}">${a.left < 0 ? '−' : ''}${fmt(Math.abs(a.left))}<em>원</em></b>
+      ${a.budget
+        ? `<div class="bar"><i style="width:${pct}%"></i></div>
+           <div class="allow-meta"><span>쓴 돈 ${fmt(a.spent)}원 · ${a.entries.length}건</span><span>${Math.round(pct)}%</span></div>`
+        : `<button class="link" data-act="tab" data-tab="plan">예산표에 '${p} 용돈' 금액을 넣으면 남은 돈이 계산돼요 →</button>`}
+    </section>
+
+    <section class="card addform">
+      <form data-form="add-allow" class="allow-form">
+        <input type="date" name="date" value="${defDate}" min="${m.id}-01" max="${m.id}-31" required aria-label="날짜" />
+        <input name="name" placeholder="뭐 샀어요?" required autocomplete="off" aria-label="항목" />
+        <input name="amount" class="amount" inputmode="numeric" placeholder="금액" required autocomplete="off" aria-label="금액" />
+        <button class="primary">추가</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <ul class="allow-list">
+        ${list.map((e) => `
+          <li data-act="edit-allow" data-id="${e.id}" tabindex="0">
+            <span class="lg-date">${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8))}</span>
+            <span class="log-name">${esc(e.name)}</span>
+            <b>${fmt(e.amount)}</b>
+          </li>`).join('') || '<li class="muted empty-row">아직 기록이 없어요 🍃</li>'}
+      </ul>
+    </section>`;
+}
+
+function editAllow(id) {
+  const e = (S.month.allowLog || []).find((x) => x.id === id);
+  if (!e) return;
+  openSheet(`
+    <h2>✏️ 용돈 기록 수정</h2>
+    <label>날짜<input type="date" name="date" value="${e.date}" /></label>
+    <label>항목<input name="name" value="${esc(e.name)}" required /></label>
+    <label>금액<input name="amount" inputmode="numeric" value="${fmt(e.amount)}" /></label>
+    <div class="sheet-actions">
+      <button value="delete" class="danger" formnovalidate>삭제</button>
+      <span></span>
+      <button value="cancel" class="ghost" formnovalidate>취소</button>
+      <button value="save" class="primary">저장</button>
+    </div>`, (action, fd) => {
+    if (action === 'delete') { commit({ type: 'delAllow', id }); toast('🗑️ 삭제했어요'); return; }
+    const amount = parseAmount(fd.get('amount'));
+    if (Number.isNaN(amount)) { toast('금액을 확인해주세요'); return false; }
+    commit({ type: 'setAllow', id, patch: { date: fd.get('date'), name: fd.get('name').trim(), amount } });
+  });
 }
 
 /* ---- 일정 (아이폰 공개 캘린더) ---- */
@@ -671,7 +743,7 @@ async function saveCalendars(calendars) {
   }
 }
 
-const VIEWS = { home: viewHome, log: viewLog, plan: viewPlan, cal: viewCal };
+const VIEWS = { home: viewHome, log: viewLog, allow: viewAllow, plan: viewPlan, cal: viewCal };
 
 /* ---------------- 시트(모달) ---------------- */
 
@@ -785,6 +857,8 @@ $app.addEventListener('click', (ev) => {
       el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
       break;
     case 'edit-log': editLog(d.id); break;
+    case 'edit-allow': editAllow(d.id); break;
+    case 'allow-who': S.allowWho = d.who; render(); break;
     case 'paste': pasteDialog(); break;
     case 'cat-menu': catMenu(d.cat); break;
     case 'add-item': {
@@ -817,6 +891,7 @@ $app.addEventListener('click', (ev) => {
 
 $app.addEventListener('keydown', (ev) => {
   if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('li[data-act="edit-log"]')) { ev.preventDefault(); editLog(ev.target.dataset.id); }
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches('li[data-act="edit-allow"]')) { ev.preventDefault(); editAllow(ev.target.dataset.id); }
   if (ev.key === 'Enter' && ev.target.matches('input[data-field]')) ev.target.blur();
 });
 
@@ -855,6 +930,17 @@ $app.addEventListener('submit', (ev) => {
     const date = fd.get('date');
     render();
     const f = document.querySelector('[data-form="add-log"]');
+    f.date.value = date;
+    f.name.focus();
+  }
+  if (form.dataset.form === 'add-allow') {
+    const amount = parseAmount(fd.get('amount'));
+    if (Number.isNaN(amount)) { toast('금액을 확인해주세요'); return; }
+    const name = fd.get('name').trim();
+    const date = fd.get('date');
+    commit({ type: 'addAllow', entry: { id: uid(), date, name, amount, who: S.allowWho || S.me, by: S.me } });
+    toast(`✅ ${name} ${fmt(amount)}원`);
+    const f = document.querySelector('[data-form="add-allow"]');
     f.date.value = date;
     f.name.focus();
   }

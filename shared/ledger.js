@@ -1,5 +1,6 @@
 // 브라우저와 서버(api/ledger.js)가 함께 쓰는 가계부 로직.
-// 한 달 데이터 = { id, rev, income, cats, log, memo }
+// 한 달 데이터 = { id, rev, income, cats, log, allowLog, memo }
+// allowLog: 각자 용돈으로 쓴 내역. 용돈은 예산표에서 이미 지출로 잡혀 있으므로 총 지출에는 더하지 않는다.
 
 export const PEOPLE = ['상화', '인화'];
 export const WHO = ['같이', '상화', '인화'];
@@ -98,6 +99,17 @@ export function applyOp(month, op) {
     case 'delLog':
       month.log = month.log.filter((e) => e.id !== op.id);
       break;
+    case 'addAllow':
+      (month.allowLog ||= []).push(op.entry);
+      break;
+    case 'setAllow': {
+      const e = (month.allowLog || []).find((e) => e.id === op.id);
+      if (e) Object.assign(e, op.patch);
+      break;
+    }
+    case 'delAllow':
+      month.allowLog = (month.allowLog || []).filter((e) => e.id !== op.id);
+      break;
     case 'setMemo':
       month.memo = op.text;
       break;
@@ -117,6 +129,7 @@ export function nextMonthFrom(prev, id) {
     income: { ...clone.income, items: fresh(clone.income.items) },
     cats: clone.cats.map((c) => ({ ...c, items: fresh(c.items) })),
     log: [],
+    allowLog: [],
     memo: clone.memo || '',
   };
 }
@@ -184,3 +197,13 @@ export function spendByCat(entries) {
 
 export const guessWho = (name) =>
   /^(최)?인화/.test(name) ? '인화' : /^(박)?상화/.test(name) ? '상화' : '같이';
+
+// 용돈: 예산표에서 이름에 "용돈"과 그 사람 이름이 들어간 항목 합계 vs 용돈 내역에 적은 사용액
+export function allowanceOf(month, person) {
+  const budget = month.cats.flatMap((c) => c.items)
+    .filter((it) => !it.auto && it.name.includes('용돈') && guessWho(it.name) === person)
+    .reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  const entries = (month.allowLog || []).filter((e) => e.who === person);
+  const spent = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  return { budget, spent, left: budget - spent, entries };
+}
