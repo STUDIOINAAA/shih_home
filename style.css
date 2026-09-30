@@ -370,3 +370,30 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
 .allow-list b { font-weight: 600; }
 .empty-row { justify-content: center; cursor: default !important; }
 .allow-mini { display: block; font-size: 11px; margin-top: 2px; }
+
+/* 용돈 (목표형) */
+.allow-goal { background: var(--accent-soft); border: 0; }
+.allow-goal .allow-top { color: var(--accent); }
+.allow-goal .allow-top b { font-size: 15px; }
+.allow-big { margin: 8px 0 10px; }
+.allow-big small { display: block; font-size: 12px; }
+.allow-big b { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+.allow-big em { font-style: normal; font-size: 16px; margin-left: 2px; }
+.allow-goal .bar { background: color-mix(in srgb, var(--card) 75%, transparent); }
+.allow-goal.is-over .bar i { background: var(--neg); }
+.allow-goal.is-over { background: var(--in-soft); }
+.allow-goal.is-over .allow-top { color: var(--neg); }
+.over { color: var(--neg); font-weight: 700; }
+.left { color: var(--accent); font-weight: 600; }
+.allow-people { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.allow-person { background: var(--card); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.allow-person > span:first-child { font-weight: 600; }
+.allow-person.who-상화 > span:first-child { color: var(--sang); }
+.allow-person.who-인화 > span:first-child { color: var(--in); }
+.allow-person b { font-size: 16px; }
+.allow-person b small { font-size: 11px; font-weight: 500; }
+.allow-line { margin: -6px 0 12px; font-size: 14px; }
+.allow-form .seg { grid-column: 1 / -1; justify-self: start; }
+@media (min-width: 600px) { .allow-form { grid-template-columns: auto 150px 1fr 130px auto !important; } .allow-form .seg { grid-column: auto; } }
+.allow-form .seg { order: -2; }
+@media (min-width: 600px) { .allow-form .seg { order: 0; } }

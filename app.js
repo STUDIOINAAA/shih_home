@@ -35,6 +35,7 @@ const S = {
   whoFilter: '전체',
   catFilter: null,
   allowWho: null,
+  allowFilter: '전체',
   addWho: '같이',
   pending: 0,
   error: '',
@@ -251,10 +252,7 @@ function viewHome(m) {
   const max = Math.max(1, ...cats.map((x) => x.v));
   const living = logTotal(m);
   const days = new Set(m.log.map((e) => e.date)).size;
-  // 예산표에서 이름에 "용돈"이 들어간 항목 (상화 용돈, 인화 용돈 …)
-  const allowance = m.cats.flatMap((c) => c.items)
-    .filter((it) => !it.auto && it.name.includes('용돈'))
-    .map((it) => ({ name: it.name, amount: itemAmount(m, it), who: guessWho(it.name) }));
+  const asum = allowSummary(m);
   return `
     <section class="stats">
       <div class="stat"><span>💰 수입</span>${secret(`<b>${fmt(t.income)}</b>`)}</div>
@@ -288,15 +286,18 @@ function viewHome(m) {
       </div>
     </section>
 
-    ${allowance.length ? `
+    ${asum.budget || asum.spent ? `
     <section class="card">
       <div class="card-head"><h2>🎁 용돈</h2><button class="link" data-act="tab" data-tab="allow">기록 보기 →</button></div>
-      <div class="living-total"><b>${fmt(allowance.reduce((s, a) => s + a.amount, 0))}</b>원</div>
+      <div class="living-total"><span class="muted">사용한 돈</span> <b>${fmt(asum.spent)}</b>원 <span class="muted">· 목표 ${fmt(asum.budget)}원</span></div>
+      ${asum.budget ? `<p class="allow-line">${leftText(asum.left)}</p>` : ''}
       <div class="split">
-        ${allowance.map((a) => {
-          const st = PEOPLE.includes(a.who) ? allowanceOf(m, a.who) : null;
-          return `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b>${st?.spent ? `<small class="allow-mini">남은 ${fmt(st.left)}</small>` : ''}</div>`;
-        }).join('')}
+        ${asum.people.map((x) => `
+          <div class="split-part who-${x.p}" style="flex:1">
+            <span>${who(x.p)}</span>
+            <b>${fmt(x.spent)}</b>
+            ${x.budget ? `<small class="allow-mini">${leftText(x.left)}</small>` : ''}
+          </div>`).join('')}
       </div>
     </section>` : ''}
 
@@ -470,32 +471,52 @@ function viewPlan(m) {
 }
 
 /* ---- 용돈 ---- */
-// 생활비보다 간단하게: 날짜 · 어디에 · 얼마만. 사람별로 용돈(예산표 금액)에서 얼마 남았는지 보여준다.
+// 생활비보다 간단하게: 누가 · 뭐 · 얼마만.
+// 목표 = 예산표의 상화 용돈 + 인화 용돈. 사용한 돈과 남은 돈(넘으면 초과)을 보여준다.
+function allowSummary(m) {
+  const people = PEOPLE.map((p) => ({ p, ...allowanceOf(m, p) }));
+  const budget = people.reduce((s, x) => s + x.budget, 0);
+  const spent = people.reduce((s, x) => s + x.spent, 0);
+  return { people, budget, spent, left: budget - spent };
+}
+
+const leftText = (left) => left < 0
+  ? `<span class="over">${fmt(-left)}원 초과</span>`
+  : `<span class="left">${fmt(left)}원 남음</span>`;
+
 function viewAllow(m) {
-  const p = S.allowWho || S.me;
-  const a = allowanceOf(m, p);
-  const pct = a.budget ? Math.min(100, (a.spent / a.budget) * 100) : 0;
-  const list = [...a.entries].sort((x, y) => y.date.localeCompare(x.date));
+  const sum = allowSummary(m);
+  const pct = sum.budget ? (sum.spent / sum.budget) * 100 : 0;
+  const addWho = S.allowWho || S.me;
+  const f = S.allowFilter || '전체';
+  const list = (m.allowLog || []).filter((e) => f === '전체' || e.who === f)
+    .sort((x, y) => y.date.localeCompare(x.date));
   const defDate = today().startsWith(m.id) ? today() : `${m.id}-01`;
   return `
-    <div class="filters">
-      ${PEOPLE.map((w) => `<button class="chip ${p === w ? 'on' : ''}" data-act="allow-who" data-who="${w}">${who(w)}</button>`).join('')}
-    </div>
-
-    <section class="card allow-head who-${p}">
-      <div class="allow-top">
-        <span>${FACE[p]} ${p} 용돈 남은 돈</span>
-        ${a.budget ? `<small>${fmt(a.budget)}원 중</small>` : ''}
+    <section class="card allow-goal ${sum.left < 0 ? 'is-over' : ''}">
+      <div class="allow-top"><span>🎯 이번 달 용돈 목표</span><b>${fmt(sum.budget)}원</b></div>
+      <div class="allow-big">
+        <small>사용한 돈</small>
+        <b>${fmt(sum.spent)}<em>원</em></b>
       </div>
-      <b class="allow-left ${a.left < 0 ? 'neg' : ''}">${a.left < 0 ? '−' : ''}${fmt(Math.abs(a.left))}<em>원</em></b>
-      ${a.budget
-        ? `<div class="bar"><i style="width:${pct}%"></i></div>
-           <div class="allow-meta"><span>쓴 돈 ${fmt(a.spent)}원 · ${a.entries.length}건</span><span>${Math.round(pct)}%</span></div>`
-        : `<button class="link" data-act="tab" data-tab="plan">예산표에 '${p} 용돈' 금액을 넣으면 남은 돈이 계산돼요 →</button>`}
+      <div class="bar"><i style="width:${Math.min(100, pct)}%"></i></div>
+      <div class="allow-meta"><span>${Math.round(pct)}% 사용</span>${sum.budget ? leftText(sum.left) : ''}</div>
+      ${sum.budget ? '' : `<button class="link" data-act="tab" data-tab="plan">예산표에 '상화 용돈', '인화 용돈' 금액을 넣으면 목표가 잡혀요 →</button>`}
+      <div class="allow-people">
+        ${sum.people.map((x) => `
+          <div class="allow-person who-${x.p}">
+            <span>${who(x.p)}</span>
+            <b>${fmt(x.spent)}<small> / ${fmt(x.budget)}</small></b>
+            ${x.budget ? leftText(x.left) : ''}
+          </div>`).join('')}
+      </div>
     </section>
 
     <section class="card addform">
       <form data-form="add-allow" class="allow-form">
+        <div class="seg" role="radiogroup" aria-label="누가 썼나요">
+          ${PEOPLE.map((w) => `<button type="button" class="seg-${w} ${addWho === w ? 'on' : ''}" data-act="allow-who" data-who="${w}">${who(w)}</button>`).join('')}
+        </div>
         <input type="date" name="date" value="${defDate}" min="${m.id}-01" max="${m.id}-31" required aria-label="날짜" />
         <input name="name" placeholder="뭐 샀어요?" required autocomplete="off" aria-label="항목" />
         <input name="amount" class="amount" inputmode="numeric" placeholder="금액" required autocomplete="off" aria-label="금액" />
@@ -503,11 +524,17 @@ function viewAllow(m) {
       </form>
     </section>
 
+    <div class="filters">
+      ${['전체', ...PEOPLE].map((w) => `<button class="chip ${f === w ? 'on' : ''}" data-act="allow-filter" data-who="${w}">${who(w)}</button>`).join('')}
+      <span class="filter-sum">${fmt(list.reduce((s, e) => s + (Number(e.amount) || 0), 0))}원</span>
+    </div>
+
     <section class="card">
       <ul class="allow-list">
         ${list.map((e) => `
           <li data-act="edit-allow" data-id="${e.id}" tabindex="0">
             <span class="lg-date">${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8))}</span>
+            <span class="dot who-${esc(e.who)}" title="${esc(e.who)}"></span>
             <span class="log-name">${esc(e.name)}</span>
             <b>${fmt(e.amount)}</b>
           </li>`).join('') || '<li class="muted empty-row">아직 기록이 없어요 🍃</li>'}
@@ -858,7 +885,11 @@ $app.addEventListener('click', (ev) => {
       break;
     case 'edit-log': editLog(d.id); break;
     case 'edit-allow': editAllow(d.id); break;
-    case 'allow-who': S.allowWho = d.who; render(); break;
+    case 'allow-who':
+      S.allowWho = d.who;
+      el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
+      break;
+    case 'allow-filter': S.allowFilter = d.who; render(); break;
     case 'paste': pasteDialog(); break;
     case 'cat-menu': catMenu(d.cat); break;
     case 'add-item': {
