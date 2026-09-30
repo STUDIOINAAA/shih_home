@@ -1,6 +1,7 @@
 import {
   PEOPLE, WHO, uid, fmt, monthLabel, shiftMonth, parseAmount, logTotal, itemAmount,
   catTotal, totals, applyOp, nextMonthFrom, parsePasted, guessWho,
+  SPEND_CATS, spendCat, spendByCat, guessSpendCat,
 } from './shared/ledger.js';
 import { seedMonth } from './shared/seed.js';
 
@@ -31,6 +32,7 @@ const S = {
   tab: ['home', 'log', 'plan'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
   showIncome: false,
   whoFilter: '전체',
+  catFilter: null,
   addWho: '같이',
   pending: 0,
   error: '',
@@ -298,9 +300,54 @@ function viewHome(m) {
 }
 
 /* ---- 생활비 ---- */
+// 카테고리별 도넛 그래프. 조각이나 범례를 누르면 아래 목록이 그 카테고리로 걸러진다.
+function donutCard(pie) {
+  const total = pie.reduce((s, c) => s + c.amount, 0);
+  const sel = pie.find((c) => c.id === S.catFilter);
+  const R = 15.9155; // 둘레 100
+  let acc = 0;
+  const slices = pie.map((c) => {
+    const pct = (c.amount / total) * 100;
+    const gap = pie.length > 1 ? Math.min(0.6, pct / 3) : 0;
+    const s = `<circle class="slice ${sel && sel.id !== c.id ? 'dim' : ''}" data-act="cat-filter" data-cat="${c.id}"
+      r="${R}" cx="21" cy="21" fill="none" stroke="${c.color}" stroke-width="${sel?.id === c.id ? 7.5 : 6}"
+      stroke-dasharray="${Math.max(pct - gap, 0.01)} ${100 - pct + gap}" stroke-dashoffset="${25 - acc}"><title>${esc(c.name)} ${fmt(c.amount)}원</title></circle>`;
+    acc += pct;
+    return s;
+  }).join('');
+  const center = sel || { emoji: '💸', name: '생활비', amount: total };
+  return `
+    <section class="card donut-card">
+      <div class="card-head"><h2>🍩 어디에 많이 썼을까?</h2>${sel ? `<button class="link" data-act="cat-filter" data-cat="${sel.id}">전체 보기</button>` : ''}</div>
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg viewBox="0 0 42 42" role="img" aria-label="카테고리별 생활비 원형 그래프">${slices}</svg>
+          <div class="donut-center">
+            <span class="donut-emoji">${center.emoji}</span>
+            <b>${fmt(center.amount)}</b>
+            <small>${sel ? `${Math.round((sel.amount / total) * 100)}%` : '원'}</small>
+          </div>
+        </div>
+        <ul class="legend">
+          ${pie.map((c) => `
+            <li>
+              <button class="${sel?.id === c.id ? 'on' : ''} ${sel && sel.id !== c.id ? 'dim' : ''}" data-act="cat-filter" data-cat="${c.id}">
+                <i style="background:${c.color}"></i>
+                <span class="lg-name">${c.emoji} ${esc(c.name)} <small>${c.count}건</small></span>
+                <span class="lg-num"><b>${fmt(c.amount)}</b><small>${Math.round((c.amount / total) * 100)}%</small></span>
+              </button>
+            </li>`).join('')}
+        </ul>
+      </div>
+    </section>`;
+}
+
 function viewLog(m) {
   const f = S.whoFilter;
-  const list = m.log.filter((e) => f === '전체' || e.who === f);
+  const byWho = m.log.filter((e) => f === '전체' || e.who === f);
+  const pie = spendByCat(byWho);
+  if (S.catFilter && !pie.some((c) => c.id === S.catFilter)) S.catFilter = null;
+  const list = byWho.filter((e) => !S.catFilter || spendCat(e).id === S.catFilter);
   const groups = {};
   for (const e of list) (groups[e.date] ||= []).push(e);
   const dates = Object.keys(groups).sort().reverse();
@@ -330,6 +377,8 @@ function viewLog(m) {
       <span class="filter-sum">${fmt(list.reduce((s, e) => s + (Number(e.amount) || 0), 0))}원</span>
     </div>
 
+    ${pie.length ? donutCard(pie) : ''}
+
     ${dates.map((d) => `
       <section class="day">
         <div class="day-head"><span>${Number(d.slice(8))}일 <small>${dayName(d)}</small></span><span>${fmt(groups[d].reduce((s, e) => s + (Number(e.amount) || 0), 0))}</span></div>
@@ -337,6 +386,7 @@ function viewLog(m) {
           ${groups[d].map((e) => `
             <li data-act="edit-log" data-id="${e.id}" tabindex="0">
               <span class="dot who-${esc(e.who)}" title="${esc(e.who)}"></span>
+              <span class="log-cat" title="${esc(spendCat(e).name)}">${spendCat(e).emoji}</span>
               <span class="log-name">${esc(e.name)}${e.note ? ` <small>${esc(e.note)}</small>` : ''}</span>
               <b>${fmt(e.amount)}</b>
             </li>`).join('')}
@@ -422,6 +472,12 @@ function editLog(id) {
     <label>항목<input name="name" value="${esc(e.name)}" required /></label>
     <label>금액<input name="amount" inputmode="numeric" value="${fmt(e.amount)}" /></label>
     <label>메모<input name="note" value="${esc(e.note)}" placeholder="선택" /></label>
+    <label>카테고리
+      <select name="cat">
+        <option value="">자동 (${guessSpendCat(e.name).emoji} ${esc(guessSpendCat(e.name).name)})</option>
+        ${SPEND_CATS.map((c) => `<option value="${c.id}" ${e.cat === c.id ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('')}
+      </select>
+    </label>
     <fieldset class="seg-field"><legend>누가</legend>
       ${WHO.map((w) => `<label class="radio seg-${w}"><input type="radio" name="who" value="${w}" ${e.who === w ? 'checked' : ''} /><span>${who(w)}</span></label>`).join('')}
     </fieldset>
@@ -434,7 +490,7 @@ function editLog(id) {
     if (action === 'delete') { commit({ type: 'delLog', id }); toast('🗑️ 삭제했어요'); return; }
     const amount = parseAmount(fd.get('amount'));
     if (Number.isNaN(amount)) { toast('금액을 확인해주세요'); return false; }
-    commit({ type: 'setLog', id, patch: { date: fd.get('date'), name: fd.get('name').trim(), amount, note: fd.get('note').trim(), who: fd.get('who') } });
+    commit({ type: 'setLog', id, patch: { date: fd.get('date'), name: fd.get('name').trim(), amount, note: fd.get('note').trim(), who: fd.get('who'), cat: fd.get('cat') } });
   });
 }
 
@@ -499,6 +555,7 @@ $app.addEventListener('click', (ev) => {
       S.month = null; load(shiftMonth(S.monthId, Number(d.d))); break;
     case 'create': createMonth(); break;
     case 'filter': S.whoFilter = d.who; render(); break;
+    case 'cat-filter': S.catFilter = S.catFilter === d.cat ? null : d.cat; render(); break;
     case 'add-who':
       S.addWho = d.who;
       el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));

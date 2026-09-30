@@ -147,5 +147,40 @@ export function parsePasted(text, monthId) {
   return out;
 }
 
+// 생활비 소비 카테고리. 항목 이름으로 자동 분류하고, 내역에 cat이 있으면 그걸 우선한다.
+// 위에서부터 먼저 맞는 카테고리로 들어가므로 순서가 중요하다.
+export const SPEND_CATS = [
+  { id: 'gift', name: '경조사·선물', emoji: '🎁', color: '#d9a441', re: /경조사|축의|부조|선물/ },
+  { id: 'wedding', name: '결혼 준비', emoji: '💍', color: '#e38aa5', re: /청첩|청모|봉투|스티커|웨딩|드레스/ },
+  { id: 'work', name: '521 FRAMEWORK', emoji: '🎬', color: '#8a7fd1', re: /521|dji|프레임워크/i },
+  { id: 'car', name: '차량·교통', emoji: '🚗', color: '#5f8fb8', re: /주유|주차|엔진오일|세차|톨게이트|하이패스|택시|버스|지하철|교통/ },
+  { id: 'digital', name: '구독·디지털', emoji: '📱', color: '#6fb3c9', re: /애플|icloud|클라우드|카카오톡|구독|넷플릭스|유튜브|쿠팡플레이|티빙/i },
+  { id: 'cvs', name: '편의점', emoji: '🏪', color: '#62b08a', re: /편의점|cu|gs25|세븐일레븐|이마트24|미니스톱|삼김/i },
+  { id: 'cafe', name: '카페', emoji: '☕', color: '#a9795b', re: /커피|카페|아샷추|아아|라떼|메가|바나프레소|컴포즈|스타벅스|이디야|빽다방|다방|미숫/ },
+  { id: 'living', name: '생활용품·뷰티', emoji: '🧴', color: '#9fb86a', re: /다이소|이케아|화장품|폼클렌징|클렌징|치약|칫솔|세정제|세제|휴지|트러블패치|커텐|커튼|비오틴|영양제|약국|올리브영/ },
+  { id: 'eatout', name: '외식', emoji: '🍽️', color: '#e07a5f', re: /점심|저녁|식사|피자|분식|서브웨이|버거|맥도날드|롯데리아|국밥|순대국|떡볶이|칼국수|냉면|평냉|닭갈비|치킨|초밥|배달|술집|고기집/ },
+  { id: 'snack', name: '간식', emoji: '🍪', color: '#f2b5a0', re: /간식|아이스크림|빵|모나카|디저트|케이크|반숙란|과자/ },
+  { id: 'grocery', name: '장보기', emoji: '🛒', color: '#4f9d9a', re: /이마트|홈플러스|롯데마트|롯데슈퍼|세이브존|마트|슈퍼|쿠팡|식재료|우유|햇반|닭가슴살|앞다리살|고기|어묵|야채|과일|음료수|계란/ },
+  { id: 'etc', name: '기타', emoji: '🏷️', color: '#b3aa9f', re: null },
+];
+const ETC = SPEND_CATS[SPEND_CATS.length - 1];
+
+export const guessSpendCat = (name) => SPEND_CATS.find((c) => c.re && c.re.test(name || '')) || ETC;
+
+export const spendCat = (e) => SPEND_CATS.find((c) => c.id === e.cat) || guessSpendCat(e.name);
+
+// 카테고리별 합계, 금액 큰 순
+export function spendByCat(entries) {
+  const map = new Map();
+  for (const e of entries) {
+    const c = spendCat(e);
+    const row = map.get(c.id) || { ...c, amount: 0, count: 0 };
+    row.amount += Number(e.amount) || 0;
+    row.count++;
+    map.set(c.id, row);
+  }
+  return [...map.values()].filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount);
+}
+
 export const guessWho = (name) =>
   /^(최)?인화/.test(name) ? '인화' : /^(박)?상화/.test(name) ? '상화' : '같이';

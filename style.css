@@ -36,13 +36,13 @@ body {
   font-size: 15px; line-height: 1.45; letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
-button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; letter-spacing: inherit; }
 button { cursor: pointer; border: 0; background: none; padding: 0; }
-input, textarea {
+input, textarea, select {
   background: var(--soft); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; width: 100%; min-width: 0;
   outline: none; transition: border-color .15s, background .15s;
 }
-input:focus, textarea:focus { border-color: var(--accent); background: var(--card); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); background: var(--card); }
 input[type="date"] { min-height: 42px; }
 small { font-size: 12px; color: var(--sub); font-weight: 400; }
 .muted { color: var(--sub); }
@@ -261,3 +261,29 @@ dialog::backdrop { background: rgba(20, 15, 10, .4); }
 @media (prefers-reduced-motion: reduce) { .login-mark { animation: none; } }
 .cat .card-head .secret.compact { margin-left: auto; }
 .cat-emoji + .cat-name { margin-left: -2px; }
+
+/* 생활비 도넛 그래프 */
+.donut-wrap { display: flex; gap: 18px; align-items: center; }
+.donut { position: relative; width: 170px; flex-shrink: 0; }
+.donut svg { display: block; width: 100%; transform: rotate(0deg); }
+.slice { cursor: pointer; transition: opacity .2s, stroke-width .2s; }
+.slice.dim { opacity: .25; }
+.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut-emoji { font-size: 22px; line-height: 1.1; }
+.donut-center b { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.donut-center small { font-size: 11px; }
+.legend { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.legend button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; text-align: left; transition: opacity .2s, background .15s; }
+.legend button:hover { background: var(--soft); }
+.legend button.on { background: var(--soft); }
+.legend button.dim { opacity: .45; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.lg-name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-num { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.lg-num b { font-size: 14px; font-weight: 600; }
+.lg-num small { font-size: 11px; }
+.log-cat { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+@media (max-width: 520px) {
+  .donut-wrap { flex-direction: column; align-items: stretch; }
+  .donut { width: 190px; margin: 0 auto 4px; }
+}
