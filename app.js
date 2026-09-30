@@ -4,6 +4,7 @@ import {
   SPEND_CATS, spendCat, spendByCat, guessSpendCat,
 } from './shared/ledger.js';
 import { seedMonth } from './shared/seed.js';
+import { parseICS, expandEvents, byDay } from './shared/ical.js';
 
 const $app = document.getElementById('app');
 const $sheet = document.getElementById('sheet');
@@ -29,7 +30,7 @@ const S = {
   monthId: today().slice(0, 7),
   month: null,
   months: [],
-  tab: ['home', 'log', 'plan'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
+  tab: ['home', 'log', 'plan', 'cal'].includes(store.get('gb-tab')) ? store.get('gb-tab') : 'home',
   showIncome: false,
   whoFilter: '전체',
   catFilter: null,
@@ -166,6 +167,7 @@ const TABS = [
   ['home', '요약', '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'],
   ['log', '생활비', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
   ['plan', '월 예산표', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'],
+  ['cal', '일정', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/>'],
 ];
 
 // 수입과 남는 돈(수입이 역산되는 값)은 탭하기 전까지 가려둔다
@@ -198,7 +200,7 @@ function render() {
       <div class="sync" id="sync"></div>
     </header>
     ${S.mode === 'local' ? `<div class="banner">미리보기 모드예요. 지금 입력한 내용은 이 브라우저에만 저장돼요. (Vercel 배포 후에는 두 사람이 함께 보게 돼요)</div>` : ''}
-    <main>${m ? VIEWS[S.tab](m) : emptyMonth()}</main>
+    <main>${m || S.tab === 'cal' ? VIEWS[S.tab](m) : emptyMonth()}</main>
     <nav class="tabs">
       ${TABS.map(([id, label, icon]) => `
         <button class="${S.tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">
@@ -292,6 +294,8 @@ function viewHome(m) {
         ${allowance.map((a) => `<div class="split-part who-${a.who}" style="flex:1"><span>${esc(a.name)}</span><b>${fmt(a.amount)}</b></div>`).join('')}
       </div>
     </section>` : ''}
+
+    ${upcomingCard()}
 
     <section class="card">
       <div class="card-head"><h2>📝 메모</h2><span class="muted">출금일 · 급여일 등</span></div>
@@ -460,7 +464,214 @@ function viewPlan(m) {
     <button class="ghost wide" data-act="add-cat">+ 분류 추가</button>`;
 }
 
-const VIEWS = { home: viewHome, log: viewLog, plan: viewPlan };
+/* ---- 일정 (아이폰 공개 캘린더) ---- */
+const CAL_COLORS = ['#4d7cc9', '#e06f6a', '#62b08a', '#d9a441', '#8a7fd1', '#4f9d9a'];
+const C = { calendars: null, parsed: [], errors: {}, loadedAt: 0, loading: false, day: null };
+const CAL_TTL = 5 * 60000;
+
+async function calApi(method, body) {
+  const r = await fetch(method === 'GET' ? '/api/calendar?ics=1' : '/api/calendar', {
+    method,
+    headers: { 'Content-Type': 'application/json', 'x-app-key': encodeURIComponent(S.key || '') },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 401) throw new AuthError();
+  const j = await r.json().catch(() => { throw new NoServer(); });
+  if (!r.ok) throw new Error(j.message || '캘린더를 불러오지 못했어요');
+  return j;
+}
+
+// 미리보기 모드에서는 이 브라우저에 저장한 목록(과 테스트용 ics 텍스트)을 쓴다
+async function loadCalendars(force = false) {
+  if (C.loading || (!force && C.calendars && Date.now() - C.loadedAt < CAL_TTL)) return;
+  C.loading = true;
+  await null; // 화면을 그리는 도중에 불려도, 다 그린 뒤에 다시 그리도록
+  try {
+    let calendars, ics = {}, errors = {};
+    if (S.mode === 'local') {
+      calendars = store.get('gb-cal', []);
+      for (const c of calendars) ics[c.id] = c.demoIcs || null;
+    } else {
+      ({ calendars, ics, errors } = await calApi('GET'));
+    }
+    C.calendars = calendars;
+    C.errors = errors || {};
+    C.parsed = calendars.map((c) => ({ cal: c, events: ics[c.id] ? parseICS(ics[c.id]) : [] }));
+    C.loadedAt = Date.now();
+  } catch (e) {
+    if (e instanceof AuthError) { S.needKey = true; }
+    else { C.calendars ||= []; toast(e.message); }
+  } finally {
+    C.loading = false;
+  }
+  if (!isEditing()) render();
+}
+
+function eventsBetween(from, to) {
+  return C.parsed.flatMap(({ cal, events }) => expandEvents(events, from, to, { cal: cal.id, color: cal.color, calName: cal.name }))
+    .sort((a, b) => a.start - b.start || (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0));
+}
+
+const hhmm = (d) => `${d.getHours() < 12 ? '오전' : '오후'} ${((d.getHours() + 11) % 12) + 1}:${String(d.getMinutes()).padStart(2, '0')}`;
+const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DOW = '일월화수목금토';
+
+function eventRow(e, { showDate = false } = {}) {
+  const when = e.allDay ? '하루 종일' : hhmm(e.start);
+  return `
+    <li class="ev" style="--c:${e.color}">
+      <span class="ev-bar"></span>
+      <div class="ev-main">
+        <div class="ev-title">${esc(e.title)}</div>
+        <div class="ev-sub">${showDate ? `${e.start.getMonth() + 1}/${e.start.getDate()}(${DOW[e.start.getDay()]}) · ` : ''}${when}${e.location ? ` · 📍 ${esc(e.location)}` : ''}</div>
+      </div>
+      <span class="ev-cal">${esc(e.calName)}</span>
+    </li>`;
+}
+
+function viewCal() {
+  if (!C.calendars) { loadCalendars(); return '<p class="empty muted">📅 일정을 불러오는 중…</p>'; }
+  if (!C.calendars.length) {
+    return `
+      <section class="card cal-empty">
+        <div class="cal-empty-mark">📅</div>
+        <h2>아이폰 캘린더를 연결해 보세요</h2>
+        <ol class="howto">
+          <li>아이폰 <b>캘린더</b> 앱 → 아래 가운데 <b>캘린더</b></li>
+          <li>공유할 캘린더 옆 <b>ⓘ</b> 누르기</li>
+          <li>맨 아래 <b>공개 캘린더</b> 켜기 → <b>링크 공유…</b> → <b>복사</b></li>
+          <li>아래 버튼을 눌러 붙여넣기</li>
+        </ol>
+        <p class="muted small">공개 캘린더는 주소를 아는 사람은 누구나 볼 수 있어요. 주소는 이 가계부(비밀번호로 보호된 저장소)에만 보관돼요.</p>
+        <button class="primary wide" data-act="cal-settings">캘린더 연결하기</button>
+      </section>`;
+  }
+  const [y, mo] = S.monthId.split('-').map(Number);
+  const first = new Date(y, mo - 1, 1);
+  const gridStart = new Date(y, mo - 1, 1 - first.getDay());
+  const weeks = Math.ceil((first.getDay() + new Date(y, mo, 0).getDate()) / 7);
+  const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + weeks * 7);
+  const days = byDay(eventsBetween(gridStart, gridEnd));
+  const todayKey = today();
+  if (!C.day || !C.day.startsWith(S.monthId)) C.day = todayKey.startsWith(S.monthId) ? todayKey : `${S.monthId}-01`;
+  const selDate = new Date(C.day + 'T00:00');
+  const dayEvents = days[C.day] || [];
+  const monthEvents = eventsBetween(first, new Date(y, mo, 1));
+  const cells = [];
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    const key = dateKey(d);
+    const evs = days[key] || [];
+    cells.push(`
+      <button class="cal-cell ${d.getMonth() !== mo - 1 ? 'out' : ''} ${key === todayKey ? 'today' : ''} ${key === C.day ? 'sel' : ''} dow${d.getDay()}" data-act="cal-day" data-day="${key}">
+        <span class="cal-num">${d.getDate()}</span>
+        <span class="cal-evs">
+          ${evs.slice(0, 3).map((e) => `<i style="--c:${e.color}">${esc(e.title)}</i>`).join('')}
+          ${evs.length > 3 ? `<em>+${evs.length - 3}</em>` : ''}
+        </span>
+      </button>`);
+  }
+  const errs = Object.entries(C.errors || {});
+  return `
+    ${errs.length ? `<div class="banner">⚠️ ${errs.map(([id, msg]) => `${esc(C.calendars.find((c) => c.id === id)?.name || '')}: ${esc(msg)}`).join('<br>')}</div>` : ''}
+    <section class="card cal-card">
+      <div class="card-head">
+        <h2>📅 우리 일정</h2>
+        <div class="cal-legend">
+          ${C.calendars.map((c) => `<span style="--c:${c.color}"><i></i>${esc(c.name)}</span>`).join('')}
+          <button class="icon small" data-act="cal-refresh" aria-label="새로고침" title="새로고침">↻</button>
+          <button class="icon small" data-act="cal-settings" aria-label="캘린더 설정" title="캘린더 설정">⚙️</button>
+        </div>
+      </div>
+      <div class="cal-grid">
+        ${[...DOW].map((w, i) => `<span class="cal-dow dow${i}">${w}</span>`).join('')}
+        ${cells.join('')}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>${selDate.getMonth() + 1}월 ${selDate.getDate()}일 (${DOW[selDate.getDay()]})</h2><span class="muted">${dayEvents.length ? `${dayEvents.length}개` : ''}</span></div>
+      <ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('') || '<li class="muted">일정이 없어요 🌿</li>'}</ul>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>🗓️ ${mo}월 전체 일정</h2><span class="muted">${monthEvents.length}개</span></div>
+      <ul class="ev-list">${monthEvents.map((e) => eventRow(e, { showDate: true })).join('') || '<li class="muted">이번 달 일정이 없어요</li>'}</ul>
+    </section>`;
+}
+
+// 요약 탭의 "다가오는 일정" 카드 (연결된 캘린더가 있을 때만)
+function upcomingCard() {
+  loadCalendars();
+  if (!C.calendars?.length) return '';
+  const now = new Date();
+  const list = eventsBetween(new Date(now.getFullYear(), now.getMonth(), now.getDate()), new Date(now.getTime() + 14 * 86400000))
+    .filter((e) => e.end > now).slice(0, 4);
+  return `
+    <section class="card">
+      <div class="card-head"><h2>📅 다가오는 일정</h2><button class="link" data-act="tab" data-tab="cal">달력 보기 →</button></div>
+      <ul class="ev-list">${list.map((e) => eventRow(e, { showDate: true })).join('') || '<li class="muted">2주 안에 일정이 없어요 🌿</li>'}</ul>
+    </section>`;
+}
+
+function calSettings(draft) {
+  const list = draft || (C.calendars?.length ? C.calendars : [{ id: 'cal0', name: S.me, color: S.me === '인화' ? CAL_COLORS[1] : CAL_COLORS[0], url: '' }]);
+  const row = (c, i) => `
+    <fieldset class="cal-row" data-i="${i}">
+      <legend>캘린더 ${i + 1}</legend>
+      <div class="cal-row-top">
+        <input name="name" value="${esc(c.name)}" placeholder="이름 (예: 상화)" maxlength="20" required />
+        <div class="swatches">
+          ${CAL_COLORS.map((col) => `<label class="sw"><input type="radio" name="color${i}" value="${col}" ${c.color === col ? 'checked' : ''} /><span style="background:${col}"></span></label>`).join('')}
+        </div>
+      </div>
+      <input name="url" value="${esc(c.url || '')}" placeholder="webcal://p00-caldav.icloud.com/published/2/…" autocomplete="off" inputmode="url" />
+    </fieldset>`;
+  openSheet(`
+    <h2>📅 아이폰 캘린더 연결</h2>
+    <p class="muted small">아이폰 캘린더 → 캘린더 목록 → ⓘ → <b>공개 캘린더</b> 켜기 → <b>링크 공유…</b>로 복사한 주소를 붙여넣으세요. 주소를 비우면 그 캘린더는 연결이 해제돼요.</p>
+    <div class="cal-rows">${list.map(row).join('')}</div>
+    ${list.length < 6 ? '<button value="add" class="ghost" formnovalidate>+ 캘린더 하나 더</button>' : ''}
+    <div class="sheet-actions">
+      <span></span><span></span>
+      <button value="cancel" class="ghost" formnovalidate>취소</button>
+      <button value="save" class="primary">저장</button>
+    </div>`, (action) => {
+    const rows = [...$sheet.querySelectorAll('.cal-row')].map((f, i) => ({
+      id: list[i]?.id || 'cal' + uid(),
+      name: f.querySelector('[name=name]').value.trim() || '캘린더',
+      color: f.querySelector(`[name=color${i}]:checked`)?.value || CAL_COLORS[i % CAL_COLORS.length],
+      url: f.querySelector('[name=url]').value.trim(),
+    }));
+    if (action === 'add') {
+      const other = PEOPLE.find((p) => !rows.some((r) => r.name === p)) || '';
+      const next = [...rows, { id: 'cal' + uid(), name: other, color: CAL_COLORS[rows.length % CAL_COLORS.length], url: '' }];
+      $sheet.close();
+      calSettings(next);
+      return false;
+    }
+    saveCalendars(rows.filter((r) => r.url));
+  });
+}
+
+async function saveCalendars(calendars) {
+  try {
+    if (S.mode === 'local') {
+      const prev = store.get('gb-cal', []);
+      store.set('gb-cal', calendars.map((c) => ({ ...c, demoIcs: prev.find((p) => p.id === c.id)?.demoIcs })));
+    } else {
+      await calApi('POST', { calendars });
+    }
+    C.calendars = null;
+    toast(calendars.length ? '📅 캘린더를 연결했어요' : '캘린더 연결을 해제했어요');
+    await loadCalendars(true);
+  } catch (e) {
+    toast(e.message);
+    C.calendars = null; loadCalendars(true);
+  }
+}
+
+const VIEWS = { home: viewHome, log: viewLog, plan: viewPlan, cal: viewCal };
 
 /* ---------------- 시트(모달) ---------------- */
 
@@ -598,6 +809,9 @@ $app.addEventListener('click', (ev) => {
       break;
     }
     case 'reveal': revealIncome(!S.showIncome); break;
+    case 'cal-day': C.day = d.day; render(); break;
+    case 'cal-refresh': loadCalendars(true).then(() => toast('🔄 일정을 새로 불러왔어요')); break;
+    case 'cal-settings': calSettings(); break;
   }
 });
 
